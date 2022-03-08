@@ -1,32 +1,42 @@
 package shop.domain
 
-import cats.Parallel
-import cats.data.EitherNel
-import shop.ext.refined._
 import derevo.cats._
-import derevo.circe.magnolia.{ decoder, encoder }
+import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.api._
 import eu.timepit.refined.boolean.And
-import eu.timepit.refined.cats._
 import eu.timepit.refined.collection.Size
-import eu.timepit.refined.string.{ MatchesRegex, ValidInt }
+import eu.timepit.refined.string.{MatchesRegex, ValidInt}
 import io.circe.Decoder
-import io.circe.refined._
 import io.estatico.newtype.macros.newtype
-import shop.domain.auth.UserId
-import shop.domain.payment.Payment
-import squants.market.USD
+import shop.ext.refined._
 
-import java.util.UUID
+import java.util.regex.Pattern
 
-object checkout {
+object checkoutX {
   type Rgx = "^[a-zA-Z]+(([',. -][a-zA-Z ])?[a-zA-Z]*)*$"
 
   type CardNamePred       = String Refined MatchesRegex[Rgx]
   type CardNumberPred     = Long Refined Size[16]
   type CardExpirationPred = String Refined (Size[4] And ValidInt)
   type CardCVVPred        = Int Refined Size[3]
+
+
+  sealed abstract class UrlEncoded
+  object UrlEncoded {
+    private[this] val valid: Pattern =
+      Pattern.compile("[a-zA-Z]*")
+    implicit def urlValidate(s: String): Validate.Plain[String, UrlEncoded] =
+      Validate.fromPredicate(
+        ss => valid.matcher(s).find(),
+        identity,
+        new UrlEncoded {}
+      )
+  }
+ // import UrlEncoded._
+  def lookupu(urle: Validate.Plain[String, UrlEncoded]):  Option[UrlEncoded] = ???
+  lookupu("Aswss")
+
 
   @derive(decoder, encoder, show)
   @newtype
@@ -39,6 +49,18 @@ object checkout {
     implicit val jsonDecoder: Decoder[CardNumber] =
       decoderOf[Long, Size[16]].map(CardNumber(_))
   }
+
+  val cn = CardNumber(Refined.unsafeApply(23111))
+
+  import eu.timepit.refined.api.Refined
+  import eu.timepit.refined.collection.Contains
+  type Username = String Refined Contains['g']
+  def lookup(username: Username):  Option[Username] = ???
+  import eu.timepit.refined.auto._
+  import eu.timepit.refined.generic._
+  lookup( "aeinstein" )
+
+  lookup("csagan")
 
   @derive(encoder, show)
   @newtype
@@ -63,26 +85,4 @@ object checkout {
       expiration: CardExpiration,
       cvv: CardCVV
   )
-
-
-  object Card {
-    def applyX(
-        name: EitherNel[String, CardName],
-        number: EitherNel[String, CardNumber],
-        expiration: EitherNel[String, CardExpiration],
-        cvv: EitherNel[String, CardCVV]
-    ) =
-      Parallel.parMap4(name, number, expiration, cvv)((na, nu, e, c) => Card(na, nu, e, c))
-  }
-
-  import eu.timepit.refined.api._
-  import eu.timepit.refined.auto._
- // implicit def id[T](t:T) = t
-
-  object CardNumberX extends RefinedTypeOps[Long, Size[16]]
-  object CardNameX extends RefinedTypeOps[String, MatchesRegex[Rgx]]
-
-  private val cn          = 1234567890123456L
-  private val card1: Card = Card.applyX(CardNameX.from("John"), CardNumberX(1234567890123456L), CardExpiration("4444"), CardCVV(333))
-
 }
