@@ -1,24 +1,24 @@
 package shop.domain
 
 import cats.Parallel
-import cats.data.EitherNel
 import shop.ext.refined._
 import derevo.cats._
 import derevo.circe.magnolia.{ decoder, encoder }
 import derevo.derive
 import eu.timepit.refined.api._
 import eu.timepit.refined.boolean.And
-import eu.timepit.refined.cats._
 import eu.timepit.refined.collection.Size
 import eu.timepit.refined.string.{ MatchesRegex, ValidInt }
 import io.circe.Decoder
-import io.circe.refined._
 import io.estatico.newtype.macros.newtype
-import shop.domain.auth.UserId
-import shop.domain.payment.Payment
-import squants.market.USD
+//import io.circe.refined._
+//import eu.timepit.refined.cats._
+//import shop.domain.auth.UserId
+//import shop.domain.payment.Payment
+//import cats.data.EitherNel
+//import squants.market.USD
 
-import java.util.UUID
+//import java.util.UUID
 
 object checkout {
   type Rgx = "^[a-zA-Z]+(([',. -][a-zA-Z ])?[a-zA-Z]*)*$"
@@ -64,16 +64,6 @@ object checkout {
       cvv: CardCVV
   )
 
-
-  object Card {
-    def applyX(
-        name: Either[String, CardNamePred],
-        number: Either[String, CardNumberPred],
-        expiration: Either[String, CardExpirationPred],
-        cvv: Either[String, CardCVVPred]
-    ) =
-      Parallel.parMap4(name, number, expiration, cvv)((na, nu, e, c) => Card(CardName(na), CardNumber(nu), CardExpiration(e), CardCVV(c)))
-  }
 
 
 }

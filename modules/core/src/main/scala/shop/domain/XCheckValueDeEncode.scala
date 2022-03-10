@@ -1,22 +1,23 @@
 package shop.domain
 
-import eu.timepit.refined.{ api, refineV }
+import cats.Parallel
+import eu.timepit.refined.{api, refineV}
 import eu.timepit.refined.api.Refined
 import eu.timepit.refined.predicates.all.NonEmpty
 import eu.timepit.refined.string.MatchesRegex
 import eu.timepit.refined.types.all.NonEmptyString
 import shop.domain.auth.UserId
+import shop.domain.checkout._
 import shop.domain.payment.Payment
 import shop.http.auth.users.User
 import squants.market.USD
-import eu.timepit.refined._
-import eu.timepit.refined.auto._
 import shop.domain.checkout._
 
 import java.util.UUID
 import shop.ext.refined._
 import eu.timepit.refined.api._
-import eu.timepit.refined.auto._
+import shop.domain.XCheckValueDeEncode.{CardCVVX, CardExpirationX, CardNumberX}
+//import eu.timepit.refined.auto._
 
 object XCheckValueDeEncode extends App {
   val decName = decoderOf[String, MatchesRegex[Rgx]].map(s => CardNumber(s.asInstanceOf[CardNumberPred]))
@@ -30,9 +31,31 @@ object XCheckValueDeEncode extends App {
   object CardExpirationX extends RefinedTypeOps[CardExpirationPred, String]//MatchesRegex[Rgx]
   object CardCVVX extends RefinedTypeOps[CardCVVPred, Int]//MatchesRegex[Rgx]
 
-  private val cn          = 1234567890123456L
-  private val card1: Either[String, Card] = Card.applyX(CardNameX.from("John"), CardNumberX.from(1234567890123456L), CardExpirationX.from("4444"), CardCVVX.from(333))
-  val pay1 = Payment(UserId(UUID.randomUUID()), USD(5.10), card1.getOrElse(???))
+    def applyPar(
+                name: Either[String, CardNamePred],
+                number: Either[String, CardNumberPred],
+                expiration: Either[String, CardExpirationPred],
+                cvv: Either[String, CardCVVPred]
+              ) =
+      Parallel.parMap4(name, number, expiration, cvv)((na, nu, e, c) => Card(CardName(na), CardNumber(nu), CardExpiration(e), CardCVV(c)))
+
+
+
+  private val card1: Either[String, Card] =  applyPar(CardNameX.from("John"), CardNumberX.from(1234567890123456L), CardExpirationX.from("4444"), CardCVVX.from(333))
+  println("Card: "+card1)
+  private val card2: Either[String, Card] =  applyPar(CardNameX.from(" John"), CardNumberX.from(12345678901234567L), CardExpirationX.from("44445"), CardCVVX.from(333))
+  println("Card: "+card2)
+  val pay1 = Payment(UserId(UUID.randomUUID()), USD(5.10), card2.getOrElse(card1.getOrElse(???)))
+  println("Payment: "+pay1)
+
+  for {
+    name <- CardNameX.from("John")
+    number <- CardNumberX.from(1234567890123456L)
+    expiration <- CardExpirationX.from("4444")
+    cvv <- CardCVVX.from(333)
+  } yield Card(CardName(name), CardNumber(number), CardExpiration(expiration), CardCVV(cvv)))
+
+
 
   import io.circe.parser.decode
   import io.circe.syntax._
@@ -42,7 +65,7 @@ object XCheckValueDeEncode extends App {
 
   val asJ2 =
     "{\"id\":\"237c9eed-d45d-4201-9077-c2b35b9346ef\",\"total\":5.1,\"card\":{\"name\":\"John\",\"number\":1234567890123456,\"expiration\":\"4444\",\"cvv\":3332}}"
-  val jspay = """{
+  val payJs = List("""{
               |  "id": "031acfc9-9967-4022-9635-66a946e9a433",
               |  "total": 57.1,
               |  "card": {
@@ -52,9 +75,31 @@ object XCheckValueDeEncode extends App {
               |    "cvv": 333
               |  }
               |}""".stripMargin
+  ,
+           """{
+              |  "id": "031acfc9-9967-4022-9635-66a946e9a433",
+              |  "total": 57.1,
+              |  "card": {
+              |    "name": " John",
+              |    "number": 123456789012345,
+              |    "expiration": "444",
+              |    "cvv": 333
+              |  }
+              |}""".stripMargin
+  ,        """{
+              |  "id": "031acfc9-9967-4022-9635-66a946e9a433",
+              |  "total": 57.1,
+              |  "card": {
+              |    "name": "John",
+              |    "number": 1234567890123456,
+              |    "expiration": "444",
+              |    "cvv": 333
+              |  }
+              |}""".stripMargin
+  )
 
-  val cardre = decode[Payment](jspay)
-  println(cardre)
+  payJs.foreach( js => println( decode[Payment](js)))
+
 
 }
 /*
