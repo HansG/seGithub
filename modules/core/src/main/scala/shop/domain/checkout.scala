@@ -67,22 +67,13 @@ object checkout {
 
   object Card {
     def applyX(
-        name: EitherNel[String, CardName],
-        number: EitherNel[String, CardNumber],
-        expiration: EitherNel[String, CardExpiration],
-        cvv: EitherNel[String, CardCVV]
+        name: Either[String, CardNamePred],
+        number: Either[String, CardNumberPred],
+        expiration: Either[String, CardExpirationPred],
+        cvv: Either[String, CardCVVPred]
     ) =
-      Parallel.parMap4(name, number, expiration, cvv)((na, nu, e, c) => Card(na, nu, e, c))
+      Parallel.parMap4(name, number, expiration, cvv)((na, nu, e, c) => Card(CardName(na), CardNumber(nu), CardExpiration(e), CardCVV(c)))
   }
 
-  import eu.timepit.refined.api._
-  import eu.timepit.refined.auto._
- // implicit def id[T](t:T) = t
-
-  object CardNumberX extends RefinedTypeOps[Long, Size[16]]
-  object CardNameX extends RefinedTypeOps[String, MatchesRegex[Rgx]]
-
-  private val cn          = 1234567890123456L
-  private val card1: Card = Card.applyX(CardNameX.from("John"), CardNumberX(1234567890123456L), CardExpiration("4444"), CardCVV(333))
 
 }

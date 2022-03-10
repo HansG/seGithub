@@ -115,7 +115,9 @@ object MainX extends IOApp.Simple {
     }
   }
 
-  override def run: IO[Unit] =
+  override def run: IO[Unit] = runFst
+
+   def runScd: IO[Unit] =
     ConfigX.dcfg.flatMap { cfg =>
       Logger[IO].info(s"Loaded config $cfg") >>
         MkHttpClient[F]
@@ -141,6 +143,32 @@ object MainX extends IOApp.Simple {
         }
 
     }
+
+
+   def runFst: IO[Unit] =
+    ConfigX.dcfg.flatMap { cfg =>
+      Logger[IO].info(s"Loaded config $cfg") >>
+        MkHttpClient[F]
+          .newEmber(cfg.httpClientConfig)
+          .map { client =>
+            val brandRoutes =
+              BrandRoutes[IO](dataBrands1).routes
+            //  val brandRoutes = BrandRoutes[IO](failingBrands(List(Brand(BrandId(UUID.randomUUID()), BrandName("brand1"))))).routes
+            val brandApp = loggers(Router(version.v1 -> brandRoutes).orNotFound)
+            val clients  = PaymentClientX.make(cfg.paymentConfig, client)
+
+            cfg.httpServerConfig -> brandApp
+          }
+          .flatMap {
+            case (cfg, httpApp) =>
+              MkHttpServer[IO].newEmber(cfg, httpApp)
+          }
+          .useForever
+    }
+
+
+
+
 
 }
 case class AppConfigX(httpClientConfig: HttpClientConfig, paymentConfig :PaymentConfig,  httpServerConfig: HttpServerConfig)

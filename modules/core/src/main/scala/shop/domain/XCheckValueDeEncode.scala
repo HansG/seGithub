@@ -15,16 +15,24 @@ import shop.domain.checkout._
 
 import java.util.UUID
 import shop.ext.refined._
+import eu.timepit.refined.api._
+import eu.timepit.refined.auto._
 
 object XCheckValueDeEncode extends App {
   val decName = decoderOf[String, MatchesRegex[Rgx]].map(s => CardNumber(s.asInstanceOf[CardNumberPred]))
 
   // def id[T](t:T) = t
 
-  private val cn = 1234567890123456L
-  private val card1: Card =
-    Card.applyX(CardName("John"), CardNumber(1234567890123456L), CardExpiration("4444"), CardCVV(333))
-  val pay1 = Payment(UserId(UUID.randomUUID()), USD(5.10), card1)
+  // implicit def id[T](t:T) = t
+
+  object CardNumberX extends RefinedTypeOps[CardNumberPred,Long ]
+  object CardNameX extends RefinedTypeOps[CardNamePred, String]//MatchesRegex[Rgx]
+  object CardExpirationX extends RefinedTypeOps[CardExpirationPred, String]//MatchesRegex[Rgx]
+  object CardCVVX extends RefinedTypeOps[CardCVVPred, Int]//MatchesRegex[Rgx]
+
+  private val cn          = 1234567890123456L
+  private val card1: Either[String, Card] = Card.applyX(CardNameX.from("John"), CardNumberX.from(1234567890123456L), CardExpirationX.from("4444"), CardCVVX.from(333))
+  val pay1 = Payment(UserId(UUID.randomUUID()), USD(5.10), card1.getOrElse(???))
 
   import io.circe.parser.decode
   import io.circe.syntax._
