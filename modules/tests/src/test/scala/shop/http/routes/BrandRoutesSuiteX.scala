@@ -107,7 +107,7 @@ object StartExX extends IOApp {
 object MainX extends IOApp.Simple {
 
   implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
-  private val loggers: HttpApp[F] => HttpApp[F] = {
+  val loggers: HttpApp[F] => HttpApp[F] = {
     { http: HttpApp[F] =>
       RequestLogger.httpApp(true, true)(http)
     } andThen { http: HttpApp[F] =>
@@ -167,10 +167,46 @@ object MainX extends IOApp.Simple {
     }
 
 
+  def runClient =     ConfigX.dcfg.flatMap { cfg =>
+    Logger[IO].info(s"Loaded config $cfg") >>
+      MkHttpClient[F]
+        .newEmber(cfg.httpClientConfig)
+        .map { client =>  PaymentClientX.make(cfg.paymentConfig, client)  }
+        .use { pclient =>
+          pclient.process
+        }
+  }
+
+
+
 
 
 
 }
+object MainY extends IOApp.Simple {
+  import MainX.logger
+
+  override def run: IO[Unit] = runClient
+
+  def runClient =     ConfigX.dcfg.flatMap { cfg =>
+    Logger[IO].info(s"Loaded config $cfg") >>
+      MkHttpClient[F]
+        .newEmber(cfg.httpClientConfig)
+        .map { client =>  PaymentClientX.make(cfg.paymentConfig, client)  }
+        .use { pclient =>
+          pclient.process.flatMap{  li => IO.println(li)}
+        }
+  }
+
+
+
+
+
+
+}
+
+
+
 case class AppConfigX(httpClientConfig: HttpClientConfig, paymentConfig :PaymentConfig,  httpServerConfig: HttpServerConfig)
 
 import com.comcast.ip4s._

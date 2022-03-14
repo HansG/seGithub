@@ -31,31 +31,28 @@ object XCheckValueDeEncode extends App {
   object CardExpirationX extends RefinedTypeOps[CardExpirationPred, String]//MatchesRegex[Rgx]
   object CardCVVX extends RefinedTypeOps[CardCVVPred, Int]//MatchesRegex[Rgx]
 
-    def applyPar(
-                name: Either[String, CardNamePred],
-                number: Either[String, CardNumberPred],
-                expiration: Either[String, CardExpirationPred],
-                cvv: Either[String, CardCVVPred]
-              ) =
-      Parallel.parMap4(name, number, expiration, cvv)((na, nu, e, c) => Card(CardName(na), CardNumber(nu), CardExpiration(e), CardCVV(c)))
+
+    def cardPar(name : String, number : Long, expiration : String, cvv : Int) =
+      Parallel.parMap4(CardNameX.from(name), CardNumberX.from(number), CardExpirationX.from(expiration), CardCVVX.from(cvv))((na, nu, e, c) => Card(CardName(na), CardNumber(nu), CardExpiration(e), CardCVV(c)))
 
 
 
-  private val card1: Either[String, Card] =  applyPar(CardNameX.from("John"), CardNumberX.from(1234567890123456L), CardExpirationX.from("4444"), CardCVVX.from(333))
+  private val card1: Either[String, Card] =  cardPar("John", 1234567890123456L, "4444", 333)
   println("Card: "+card1)
-  private val card2: Either[String, Card] =  applyPar(CardNameX.from(" John"), CardNumberX.from(12345678901234567L), CardExpirationX.from("44445"), CardCVVX.from(333))
+  private val card2: Either[String, Card] =  cardPar(" John", 12345678901234567L, "44445", 333)
   println("Card: "+card2)
   val pay1 = Payment(UserId(UUID.randomUUID()), USD(5.10), card2.getOrElse(card1.getOrElse(???)))
   println("Payment: "+pay1)
 
-  for {
-    name <- CardNameX.from("John")
-    number <- CardNumberX.from(1234567890123456L)
-    expiration <- CardExpirationX.from("4444")
-    cvv <- CardCVVX.from(333)
-  } yield Card(CardName(name), CardNumber(number), CardExpiration(expiration), CardCVV(cvv)))
+  def cardSeq(name : String, number : Long, expiration : String, cvv : Int)=
+    for {
+      name <- CardNameX.from(name)
+      number <- CardNumberX.from(number)
+      expiration <- CardExpirationX.from(expiration)
+      cvv <- CardCVVX.from(cvv)
+    } yield Card(CardName(name), CardNumber(number), CardExpiration(expiration), CardCVV(cvv))
 
-
+  cardSeq("John", 1234567890123456L, "4444", 333)
 
   import io.circe.parser.decode
   import io.circe.syntax._
