@@ -1,27 +1,31 @@
 package shop.domain
 
 import java.util.UUID
-
 import scala.util.control.NoStackTrace
-
 import shop.ext.http4s.queryParam
 import shop.ext.http4s.refined._
-import shop.optics.uuid
-
+import shop.optics.{IsUUID, uuid}
 import derevo.cats._
-import derevo.circe.magnolia.{ decoder, encoder }
+import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.auto._
 import eu.timepit.refined.cats._
 import eu.timepit.refined.types.string.NonEmptyString
 import io.circe.refined._
-import io.circe.{ Decoder, Encoder }
+import io.circe.{Decoder, Encoder}
 import io.estatico.newtype.macros.newtype
+import monocle.Iso
 
 object brand {
   @derive(decoder, encoder, eqv, show, uuid)
   @newtype
   case class BrandId(value: UUID)
+
+  object BrandId {
+    implicit val identityBrandId: IsUUID[BrandId] = new IsUUID[BrandId] {
+      val _UUID = Iso[UUID, BrandId](BrandId(_))(_.value )
+    }
+  }
 
   @derive(decoder, encoder, eqv, show)
   @newtype

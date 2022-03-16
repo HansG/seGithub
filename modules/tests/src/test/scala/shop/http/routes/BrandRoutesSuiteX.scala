@@ -127,7 +127,7 @@ object MainX extends IOApp.Simple {
               BrandRoutes[IO](dataBrands1).routes
             //  val brandRoutes = BrandRoutes[IO](failingBrands(List(Brand(BrandId(UUID.randomUUID()), BrandName("brand1"))))).routes
             val brandApp = loggers(Router(version.v1 -> brandRoutes).orNotFound)
-            val clientb  = PaymentClientX.make(cfg.paymentConfig, client)
+            val clientb  = BrandClientX.make(cfg.paymentConfig, client)
 
             (clientb, cfg.httpServerConfig -> brandApp)
           }
@@ -155,7 +155,7 @@ object MainX extends IOApp.Simple {
               BrandRoutes[IO](dataBrands1).routes
             //  val brandRoutes = BrandRoutes[IO](failingBrands(List(Brand(BrandId(UUID.randomUUID()), BrandName("brand1"))))).routes
             val brandApp = loggers(Router(version.v1 -> brandRoutes).orNotFound)
-            val clients  = PaymentClientX.make(cfg.paymentConfig, client)
+            val clients  = BrandClientX.make(cfg.paymentConfig, client)
 
             cfg.httpServerConfig -> brandApp
           }
@@ -165,21 +165,6 @@ object MainX extends IOApp.Simple {
           }
           .useForever
     }
-
-
-  def runClient =     ConfigX.dcfg.flatMap { cfg =>
-    Logger[IO].info(s"Loaded config $cfg") >>
-      MkHttpClient[F]
-        .newEmber(cfg.httpClientConfig)
-        .map { client =>  PaymentClientX.make(cfg.paymentConfig, client)  }
-        .use { pclient =>
-          pclient.process
-        }
-  }
-
-
-
-
 
 
 }
@@ -192,7 +177,7 @@ object MainY extends IOApp.Simple {
     Logger[IO].info(s"Loaded config $cfg") >>
       MkHttpClient[F]
         .newEmber(cfg.httpClientConfig)
-        .map { client =>  PaymentClientX.make(cfg.paymentConfig, client)  }
+        .map { client =>  BrandClientX.make(cfg.paymentConfig, client)  }
         .use { pclient =>
           pclient.process.flatMap{  li => IO.println(li)}
         }
@@ -214,19 +199,19 @@ import scala.concurrent.duration._
 import eu.timepit.refined.auto._
 import cats.syntax.all._
 
-trait PaymentClientX {
+trait BrandClientX {
   def process: IO[List[Brand]]
 }
 
-object PaymentClientX {
-  def make( cfg: PaymentConfig, client: Client[IO] ): PaymentClientX =
-    new PaymentClientX with Http4sClientDsl[IO] {
+object BrandClientX {
+  def make( cfg: PaymentConfig, client: Client[IO] ): BrandClientX =
+    new BrandClientX with Http4sClientDsl[IO] {
       def process: IO[List[Brand]] =
         Uri.fromString(cfg.uri.value + "/brands").liftTo[IO].flatMap { uri =>
           client.run(GET(uri)).use { resp =>
             resp.status match {
               case Status.Ok | Status.Conflict =>
-                resp.asJsonDecode[List[Brand]]
+                 resp.asJsonDecode[List[Brand]]
               case st =>
                 PaymentError(
                   Option(st.reason).getOrElse("unknown")

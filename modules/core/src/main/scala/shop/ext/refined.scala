@@ -4,7 +4,7 @@ import eu.timepit.refined._
 import eu.timepit.refined.api._
 import eu.timepit.refined.auto._
 import eu.timepit.refined.collection.Size
-import io.circe.Decoder
+import io.circe.{Decoder, Encoder}
 
 object refined {
 
@@ -17,5 +17,8 @@ object refined {
 
   def decoderOf[T, P](implicit v: Validate[T, P], d: Decoder[T]): Decoder[T Refined P] =
     d.emap(refineV[P].apply[T](_))
+
+  implicit def encoderOf[T, P](d: Encoder[T]): Encoder[T Refined P] =
+    d.contramap(_.value)
 
 }
