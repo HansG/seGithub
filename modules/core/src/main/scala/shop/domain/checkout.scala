@@ -1,6 +1,7 @@
 package shop.domain
 
 import cats.Parallel
+import cats.conversions.all.autoConvertProfunctorVariance
 import shop.ext.refined._
 import derevo.cats._
 import derevo.circe.magnolia.{decoder, encoder}
@@ -29,13 +30,18 @@ type Rgx = "^[a-zA-Z]+(([',. -][a-zA-Z ])?[a-zA-Z]*)*$"
   type CardExpirationPred = String Refined (Size[4] And ValidInt)
   type CardCVVPred        = Int Refined Size[3]
 
+  object CardNamePred extends RefinedTypeOps[CardNamePred, String]
+
   @derive( decoder,encoder,show)//
   @newtype
   case class CardName(value: CardNamePred)
-  object CardName {
+  /*object CardName {
       implicit val jsonDecoder: Decoder[CardName] =
       decoderOf[String, MatchesRegex[Rgx]].map(CardName(_))
-  }
+
+    implicit val jsonEncoder: Encoder[CardName] =
+      encoderOf[String, MatchesRegex[Rgx]].contramap(_.value)
+  }*/
 
   @derive(encoder, show)
   @newtype
