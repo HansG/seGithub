@@ -11,23 +11,37 @@ import eu.timepit.refined.predicates.all.NonEmpty
 import cats.effect._
 import cats.implicits._
 import eu.timepit.refined._
-import eu.timepit.refined.api._
+import eu.timepit.refined.api.{ Refined, _ }
 import eu.timepit.refined.auto._
 import eu.timepit.refined.collection.Contains
 import eu.timepit.refined.numeric.Greater
 import eu.timepit.refined.types.string.NonEmptyString
 import io.estatico.newtype.macros._
 import shapeless._
+import skunk.syntax.id
+import skunk.syntax.id
 
 //Überprüfung von Werten zur Compiletime - und Runtime
 object XCheckValueCompileAndRun extends App {
 
   type Word = String Refined MatchesRegex[W.`"[a-zA-Z]*"`.T]
+  //statt W...
+  type Rgx   = "[a-zA-Z]*";
+  type Word1 = String Refined MatchesRegex[Rgx]
   //Compiletime
   def lookup(username: Word): Option[Word] = None
   lookup("aeinstein")
-  //  def typeableCast[T](value: Any)(implicit T: Typeable[T]): Option[T] = T.cast(value)
-  //  typeableCast[Word]("AlloweD")
+  //einfach
+  identity[Word]("aeinstein")
+//für Laufzeit
+  object Word extends RefinedTypeOps[Word, String] //MatchesRegex[Rgx]
+  val p = Word.from("aeinstein"): Either[String, Word]
+  //oder ohne explizites object:
+  def castt[T](value: Any)(implicit T: Typeable[T]): Option[T] = T.cast(value)
+  val p = castt[Word]("aeinstein")
+  //siehe:
+  def des[T](implicit T: Typeable[T]): String = T.describe
+//sequentiell vs parallel siehe XCheckValueDeEncode
 
   type Username = String Refined Contains['g']
   //Compiletime
@@ -44,8 +58,8 @@ object XCheckValueCompileAndRun extends App {
   println(OneToTen.validate(50))
 
   //Runtime:
-  val parseNE                              = refineV[NonEmpty]
-  val res: Either[String, NonEmptyString]  = parseNE("some runtime value")
+  val parseNE                             = refineV[NonEmpty]
+  val res: Either[String, NonEmptyString] = parseNE("some runtime value")
   //kein eigens object (zB OneToTen)  nötig für Standard  Refined
   val res1: Either[String, NonEmptyString] = NonEmptyString.from("some runtime value")
 

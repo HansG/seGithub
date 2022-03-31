@@ -23,7 +23,7 @@ import io.estatico.newtype.macros.newtype
 
 object checkout {
   //  type Rgx = "[a-zA-Z]*)*$"
-type Rgx = "^[a-zA-Z]+(([',. -][a-zA-Z ])?[a-zA-Z]*)*$"
+  type Rgx = "^[a-zA-Z]+(([',. -][a-zA-Z ])?[a-zA-Z]*)*$"
 
   type CardNamePred       = String Refined MatchesRegex[Rgx]
   type CardNumberPred     = Long Refined Size[16]
@@ -32,12 +32,12 @@ type Rgx = "^[a-zA-Z]+(([',. -][a-zA-Z ])?[a-zA-Z]*)*$"
 
   object CardNamePred extends RefinedTypeOps[CardNamePred, String]
 
-  @derive( decoder,encoder,show)//
+  @derive(decoder, encoder, show) //
   @newtype
   case class CardName(value: CardNamePred)
   /*object CardName {
-      implicit val jsonDecoder: Decoder[CardName] =
-      decoderOf[String, MatchesRegex[Rgx]].map(CardName(_))
+    implicit val jsonDecoder: Decoder[CardName] =
+      decoderOf[String, MatchesRegex[Rgx]].map( v => CardName(v))
 
     implicit val jsonEncoder: Encoder[CardName] =
       encoderOf[String, MatchesRegex[Rgx]].contramap(_.value)
@@ -74,7 +74,5 @@ type Rgx = "^[a-zA-Z]+(([',. -][a-zA-Z ])?[a-zA-Z]*)*$"
       expiration: CardExpiration,
       cvv: CardCVV
   )
-
-
 
 }
