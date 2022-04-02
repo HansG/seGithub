@@ -32,7 +32,7 @@ object checkout {
 
   object CardNamePred extends RefinedTypeOps[CardNamePred, String]
 
-  @derive(decoder, encoder, show) //
+  @derive(decoder, encoder, show)
   @newtype
   case class CardName(value: CardNamePred)
   object CardName extends RefinedTypeOps[CardNamePred, String]/* {XX
@@ -41,29 +41,30 @@ object checkout {
 
     implicit val jsonEncoder: Encoder[CardName] =
       encoderOf[String, MatchesRegex[Rgx]].contramap(_.value)
-  
+
   }*/
 
-  @derive(encoder, show)
+  @derive(decoder, encoder, show)
   @newtype
   case class CardNumber(value: CardNumberPred)
-  object CardNumber extends RefinedTypeOps[CardNumberPred, Long] {//XX
+  object CardNumber extends RefinedTypeOps[CardNumberPred, Long] /*XX{
     implicit val jsonDecoder: Decoder[CardNumber] =
       decoderOf[Long, Size[16]].map(CardNumber(_))
-  }
+  }*/
 
-  @derive(encoder, show)
+  @derive(decoder, encoder, show)
   @newtype
   case class CardExpiration(value: CardExpirationPred)
-  object CardExpiration extends RefinedTypeOps[CardExpirationPred, String] {//XX
+  object CardExpiration extends RefinedTypeOps[CardExpirationPred, String] /*{XX
     implicit val jsonDecoder: Decoder[CardExpiration] =
       decoderOf[String, Size[4] And ValidInt].map(CardExpiration(_))
-  }
+  }*/
 
-  @derive(encoder, show)
+  @derive( encoder, show)
   @newtype
   case class CardCVV(value: CardCVVPred)
   object CardCVV extends RefinedTypeOps[CardCVVPred, Int] {
+    //explizit falls Besionderheit nötig  wäre
     implicit val jsonDecoder: Decoder[CardCVV] =
       decoderOf[Int, Size[3]].map(CardCVV(_))
   }
