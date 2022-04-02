@@ -11,50 +11,51 @@ import shop.domain.checkout._
 import shop.domain.payment.Payment
 import shop.http.auth.users.User
 import squants.market.USD
-import shop.domain.checkout._
 
 import java.util.UUID
 import shop.ext.refined._
-import eu.timepit.refined.api._
-import shop.domain.XCheckValueDeEncode.{ CardCVVX, CardExpirationX, CardNumberX }
+//import eu.timepit.refined.api._
 //import eu.timepit.refined.auto._
 
 object XCheckValueDeEncode extends App {
-  val decName = decoderOf[String, MatchesRegex[Rgx]].map(s => CardNumber(s.asInstanceOf[CardNumberPred]))
+  val decName = decoderOf[String, MatchesRegex[Rgx]].map(s => CardName(s.asInstanceOf[CardNamePred]))
 
-  // def id[T](t:T) = t
+//  object CardNumberX     extends RefinedTypeOps[CardNumberPred, Long]
+//  object CardNameX       extends RefinedTypeOps[CardNamePred, String]
+//  object CardExpirationX extends RefinedTypeOps[CardExpirationPred, String]
+//  object CardCVVX        extends RefinedTypeOps[CardCVVPred, Int]
 
-  // implicit def id[T](t:T) = t
-
-  object CardNumberX     extends RefinedTypeOps[CardNumberPred, Long]
-  object CardNameX       extends RefinedTypeOps[CardNamePred, String] //MatchesRegex[Rgx]
-  object CardExpirationX extends RefinedTypeOps[CardExpirationPred, String] //MatchesRegex[Rgx]
-  object CardCVVX        extends RefinedTypeOps[CardCVVPred, Int] //MatchesRegex[Rgx]
-
-  def cardPar(name: String, number: Long, expiration: String, cvv: Int) =
+  //horizontale Kombi zu Produkttyp mit kumulierten/kombinierten/Produkt der Fehler:
+  def toCardOrFails(name: String, number: Long, expiration: String, cvv: Int) =
     Parallel.parMap4(
-      CardNameX.from(name),
-      CardNumberX.from(number),
-      CardExpirationX.from(expiration),
-      CardCVVX.from(cvv)
+      CardName.from(name),
+      CardNumber.from(number),
+      CardExpiration.from(expiration),
+      CardCVV.from(cvv)
     )((na, nu, e, c) => Card(CardName(na), CardNumber(nu), CardExpiration(e), CardCVV(c)))
 
-  private val card1: Either[String, Card] = cardPar("John", 1234567890123456L, "4444", 333)
-  println("Card: " + card1)
-  private val card2: Either[String, Card] = cardPar(" John", 12345678901234567L, "44445", 333)
+  private val card1: Either[String, Card] = toCardOrFails("John", 1234567890123456L, "4444", 333)
+  println("Card: " + card1) //Card: Right(Card(John,1234567890123456,4444,333))
+
+  private val card2: Either[String, Card] = toCardOrFails(" John", 12345678901234567L, "44445", 333)
+  //Card: Left(Predicate failed: " John".matches("^[a-zA-Z]+(([',. -][a-zA-Z ])?[a-zA-Z]*)*$").
+  // Predicate failed: Must have 16 digits.
+  // Left predicate of (Must have 4 digits && isValidValidInt("44445")) failed: Predicate failed: Must have 4 digits.)
   println("Card: " + card2)
+
   val pay1 = Payment(UserId(UUID.randomUUID()), USD(5.10), card2.getOrElse(card1.getOrElse(???)))
+ // Payment: Payment(daf6b0f0-7400-476d-83de-2178603c39c5,5.1 USD,Card(John,1234567890123456,4444,333))
   println("Payment: " + pay1)
 
-  def cardSeq(name: String, number: Long, expiration: String, cvv: Int) =
+  def toCardOrFirstFail(name: String, number: Long, expiration: String, cvv: Int) =
     for {
-      name       <- CardNameX.from(name)
-      number     <- CardNumberX.from(number)
-      expiration <- CardExpirationX.from(expiration)
-      cvv        <- CardCVVX.from(cvv)
+      name       <- CardName.from(name)
+      number     <- CardNumber.from(number)
+      expiration <- CardExpiration.from(expiration)
+      cvv        <- CardCVV.from(cvv)
     } yield Card(CardName(name), CardNumber(number), CardExpiration(expiration), CardCVV(cvv))
 
-  cardSeq("John", 1234567890123456L, "4444", 333)
+  toCardOrFirstFail("John", 1234567890123456L, "4444", 333)
 
   import io.circe.parser.decode
   import io.circe.syntax._

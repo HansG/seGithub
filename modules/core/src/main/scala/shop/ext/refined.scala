@@ -1,8 +1,8 @@
 package shop.ext
 
-import eu.timepit.refined._
 import cats.Show
-import eu.timepit.refined.api._
+import eu.timepit.refined._
+import eu.timepit.refined.api.{Refined, _}
 import eu.timepit.refined.auto._
 import eu.timepit.refined.collection.Size
 import io.circe.{Decoder, Encoder}
@@ -22,7 +22,7 @@ object refined {
   implicit def encoderOf[T, P](implicit d: Encoder[T]): Encoder[T Refined P] =
     d.contramap(_.value)
 
-  implicit def showOf[T, P](implicit d: Encoder[T]): Show[T Refined P] =
-    d.contramap(_.value)
+  implicit def showOf[T, P](implicit d: Show[T]): Show[T Refined P] =
+    Show.show( (rtp: T Refined P) =>  d.show( rtp.value))
 
 }
