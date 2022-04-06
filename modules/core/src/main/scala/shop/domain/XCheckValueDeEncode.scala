@@ -1,7 +1,7 @@
 package shop.domain
 
 import cats.Parallel
-import eu.timepit.refined.{api, refineV}
+import eu.timepit.refined.{ api, refineV }
 import eu.timepit.refined.api.Refined
 import eu.timepit.refined.predicates.all.NonEmpty
 import eu.timepit.refined.string.MatchesRegex
@@ -11,58 +11,70 @@ import shop.domain.checkout._
 import shop.domain.payment.Payment
 import shop.http.auth.users.User
 import squants.market.USD
-import shop.domain.checkout._
 
 import java.util.UUID
 import shop.ext.refined._
-import eu.timepit.refined.api._
-import shop.domain.XCheckValueDeEncode.{CardCVVX, CardExpirationX, CardNumberX}
+//import eu.timepit.refined.api._
 //import eu.timepit.refined.auto._
 
 object XCheckValueDeEncode extends App {
-  val decName = decoderOf[String, MatchesRegex[Rgx]].map(s => CardNumber(s.asInstanceOf[CardNumberPred]))
 
-  // def id[T](t:T) = t
+   val cn : CardNamePred = CardNamePred("Nawe")
+ //  val cn1 = CardNameP(" nnn") Predicate failed
 
-  // implicit def id[T](t:T) = t
+  //Laufzeit Parser/Konstruktor:
 
-  object CardNumberX extends RefinedTypeOps[CardNumberPred,Long ]
-  object CardNameX extends RefinedTypeOps[CardNamePred, String]//MatchesRegex[Rgx]
-  object CardExpirationX extends RefinedTypeOps[CardExpirationPred, String]//MatchesRegex[Rgx]
-  object CardCVVX extends RefinedTypeOps[CardCVVPred, Int]//MatchesRegex[Rgx]
+  //paralleles Produkt-Parsen: Ergebnis Produkttyp oder Produkt/Liste der Fehler:
+  def toCardOrFails(name: String, number: Long, expiration: String, cvv: Int) =
+    Parallel.parMap4(
+      CardNamePred.from(name),
+      CardNumberPred.from(number),
+      CardExpirationPred.from(expiration),
+      CardCVVPred.from(cvv)
+    )((na, nu, e, c) => Card(CardName(na), CardNumber(nu), CardExpiration(e), CardCVV(c)))
 
+  private val card1: Either[String, Card] = toCardOrFails("John", 1234567890123456L, "4444", 333)
+  println("Card: " + card1) //Card: Right(Card(John,1234567890123456,4444,333))
 
-    def cardPar(name : String, number : Long, expiration : String, cvv : Int) =
-      Parallel.parMap4(CardNameX.from(name), CardNumberX.from(number), CardExpirationX.from(expiration), CardCVVX.from(cvv))((na, nu, e, c) => Card(CardName(na), CardNumber(nu), CardExpiration(e), CardCVV(c)))
+  private val card2: Either[String, Card] = toCardOrFails(" John", 12345678901234567L, "44445", 333)
+  //Card: Left(Predicate failed: " John".matches("^[a-zA-Z]+(([',. -][a-zA-Z ])?[a-zA-Z]*)*$").
+  // Predicate failed: Must have 16 digits.
+  // Left predicate of (Must have 4 digits && isValidValidInt("44445")) failed: Predicate failed: Must have 4 digits.)
+  println("Card: " + card2)
 
-
-
-  private val card1: Either[String, Card] =  cardPar("John", 1234567890123456L, "4444", 333)
-  println("Card: "+card1)
-  private val card2: Either[String, Card] =  cardPar(" John", 12345678901234567L, "44445", 333)
-  println("Card: "+card2)
   val pay1 = Payment(UserId(UUID.randomUUID()), USD(5.10), card2.getOrElse(card1.getOrElse(???)))
-  println("Payment: "+pay1)
+ // Payment: Payment(daf6b0f0-7400-476d-83de-2178603c39c5,5.1 USD,Card(John,1234567890123456,4444,333))
+  println("Payment: " + pay1)
 
-  def cardSeq(name : String, number : Long, expiration : String, cvv : Int)=
+  //sequentielles Produkt-Parsen: Ergebnis Produkttyp oder erster Fehler (fail fast):
+  def toCardOrFirstFail(name: String, number: Long, expiration: String, cvv: Int) =
     for {
-      name <- CardNameX.from(name)
-      number <- CardNumberX.from(number)
-      expiration <- CardExpirationX.from(expiration)
-      cvv <- CardCVVX.from(cvv)
+      name       <- CardNamePred.from(name)
+      number     <- CardNumberPred.from(number)
+      expiration <- CardExpirationPred.from(expiration)
+      cvv        <- CardCVVPred.from(cvv)
     } yield Card(CardName(name), CardNumber(number), CardExpiration(expiration), CardCVV(cvv))
 
-  cardSeq("John", 1234567890123456L, "4444", 333)
+  toCardOrFirstFail("John", 1234567890123456L, "4444", 333)
 
+
+  //Laufzeit  Json En/Decode
+  // via @derive(decoder, encoder,.. und import:
   import io.circe.parser.decode
   import io.circe.syntax._
 
-  val asJ = pay1.asJson.noSpaces
-  println(asJ)
 
-  val asJ2 =
-    "{\"id\":\"237c9eed-d45d-4201-9077-c2b35b9346ef\",\"total\":5.1,\"card\":{\"name\":\"John\",\"number\":1234567890123456,\"expiration\":\"4444\",\"cvv\":3332}}"
-  val payJs = List("""{
+  //Encode -> kompaktes  Json:
+  val asJ = pay1.asJson.noSpaces
+  //{"id":"2399b828-6dd5-448a-8ac9-11d20efd3f6d","total":5.1,"card":{"name":"John","number":1234567890123456,"expiration":"4444","cvv":333}}
+  println(asJ)
+  //Encode ->  formatiertes Json:
+  val asJ1 = pay1.asJson.spaces4SortKeys
+  println(asJ1)
+
+  //Decode zu Either[Error, A] -> fail fast mit (erstem Fehler + "downstream Felder")
+  val payJs = List(
+    """{
               |  "id": "031acfc9-9967-4022-9635-66a946e9a433",
               |  "total": 57.1,
               |  "card": {
@@ -72,8 +84,8 @@ object XCheckValueDeEncode extends App {
               |    "cvv": 333
               |  }
               |}""".stripMargin
-  ,
-           """{
+    ,//Right(Payment(031acfc9-9967-4022-9635-66a946e9a433,57.1 USD,Card(John,1234567890123456,4444,333)))
+    """{
               |  "id": "031acfc9-9967-4022-9635-66a946e9a433",
               |  "total": 57.1,
               |  "card": {
@@ -83,7 +95,8 @@ object XCheckValueDeEncode extends App {
               |    "cvv": 333
               |  }
               |}""".stripMargin
-  ,        """{
+    ,//Left(DecodingFailure(Predicate failed: " John".matches("^[a-zA-Z]+(([',. -][a-zA-Z ])?[a-zA-Z]*)*$")., List(DownField(name), DownField(card))))
+    """{
               |  "id": "031acfc9-9967-4022-9635-66a946e9a433",
               |  "total": 57.1,
               |  "card": {
@@ -93,13 +106,29 @@ object XCheckValueDeEncode extends App {
               |    "cvv": 333
               |  }
               |}""".stripMargin
+    ,//Left(DecodingFailure(Left predicate of (Must have 4 digits && isValidValidInt("444")) failed: Predicate failed: Must have 4 digits., List(DownField(expiration), DownField(card))))
+  """
+      |{
+      |    "card" : {
+      |        "cvv" : 333,
+      |        "expiration" : "4444",
+      |        "name" : "John",
+      |        "number" : 12345678901234567
+      |    },
+      |    "id" : "2a47b1f1-ffd8-44c0-bd81-020088c222ee",
+      |    "total" : 5.1
+      |}
+      |""".stripMargin
+    //  Left(DecodingFailure(Predicate failed: Must have 16 digits., List(DownField(number), DownField(card))))
   )
 
-  payJs.foreach( js => println( decode[Payment](js)))
+  payJs.foreach(js => println(decode[Payment](js)))
 
 
 }
 /*
+
+
  val str: String = "some runtime value"
   val checkNonEmpty = refineV[NonEmpty]
   val res: Either[String, NonEmptyString] = checkNonEmpty(str)
