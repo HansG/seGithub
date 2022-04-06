@@ -22,7 +22,6 @@ object refined {
   implicit def encoderOf[T, P](implicit d: Encoder[T]): Encoder[T Refined P] =
     d.contramap(_.value)
 
-  implicit def showOf[T, P](implicit d: Encoder[T]): Show[T Refined P] =
-    d.contramap(_.value)
+  implicit def showOf[T, P](implicit d: Encoder[T]): Show[T Refined P] =  Show.show(_.value)
 
 }
