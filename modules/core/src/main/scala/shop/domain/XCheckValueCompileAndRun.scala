@@ -35,15 +35,18 @@ object XCheckValueCompileAndRun extends App {
   identity[Word]("aeinstein")
 //für Laufzeit
   object Word extends RefinedTypeOps[Word, String] //MatchesRegex[Rgx]
-  val p = Word.from("aeinstein"): Either[String, Word]
+  val w = Word.from("aeinstein"): Either[String, Word]
+  //nur für Compiletime mit String-Literal:
+  val w1 = Word("aeinstein"):  Word
 
-  //oder ohne explizites object, jedoch mit expliziten Typ T
-  def ToRefined[T,RTP](implicit  rt: RefinedType.AuxT[RTP, T])  = new  RefinedTypeOps[RTP, T]
-  val p3 = ToRefined[String, Word].from("aeinstein")
 
-  //oder direkt als Methode mit expliziten Typ T und P
+  //oder ohne explizites object, direkt als Methode mit expliziten Typ T und P
   def toRefined[T,P](t: T)(implicit valV:  Validate[T, P]): Either[String,  T Refined P] = refineV[P].apply[T](t)(valV)
   toRefined[String, MatchesRegex[Rgx]]("aeinstein")
+
+  //oder ohne explizites object, jedoch mit expliziten Typ T und RTP
+  def ToRefined[T,RTP](implicit  rt: RefinedType.AuxT[RTP, T])  = new  RefinedTypeOps[RTP, T]
+  val p3 = ToRefined[String, Word].from("aeinstein")
 
   //oder ohne explizites object, jedoch mit expliziten Typ T und P
   implicit def ToRefined1[T,P](implicit  rt: RefinedType.AuxT[T Refined P, T])  = new  RefinedTypeOps[T Refined P, T]

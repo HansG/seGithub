@@ -18,20 +18,19 @@ import shop.ext.refined._
 //import eu.timepit.refined.auto._
 
 object XCheckValueDeEncode extends App {
-  val decName = decoderOf[String, MatchesRegex[Rgx]].map(s => CardName(s.asInstanceOf[CardNamePred]))
 
-//  object CardNumberX     extends RefinedTypeOps[CardNumberPred, Long]
-//  object CardNameX       extends RefinedTypeOps[CardNamePred, String]
-//  object CardExpirationX extends RefinedTypeOps[CardExpirationPred, String]
-//  object CardCVVX        extends RefinedTypeOps[CardCVVPred, Int]
+   val cn : CardNamePred = CardNamePred("Nawe")
+ //  val cn1 = CardNameP(" nnn") Predicate failed
 
-  //horizontale Kombi zu Produkttyp mit kumulierten/kombinierten/Produkt der Fehler:
+  //Laufzeit Parser/Konstruktor:
+
+  //paralleles Produkt-Parsen: Ergebnis Produkttyp oder Produkt/Liste der Fehler:
   def toCardOrFails(name: String, number: Long, expiration: String, cvv: Int) =
     Parallel.parMap4(
-      CardName.from(name),
-      CardNumber.from(number),
-      CardExpiration.from(expiration),
-      CardCVV.from(cvv)
+      CardNamePred.from(name),
+      CardNumberPred.from(number),
+      CardExpirationPred.from(expiration),
+      CardCVVPred.from(cvv)
     )((na, nu, e, c) => Card(CardName(na), CardNumber(nu), CardExpiration(e), CardCVV(c)))
 
   private val card1: Either[String, Card] = toCardOrFails("John", 1234567890123456L, "4444", 333)
@@ -47,31 +46,33 @@ object XCheckValueDeEncode extends App {
  // Payment: Payment(daf6b0f0-7400-476d-83de-2178603c39c5,5.1 USD,Card(John,1234567890123456,4444,333))
   println("Payment: " + pay1)
 
+  //sequentielles Produkt-Parsen: Ergebnis Produkttyp oder erster Fehler (fail fast):
   def toCardOrFirstFail(name: String, number: Long, expiration: String, cvv: Int) =
     for {
-      name       <- CardName.from(name)
-      number     <- CardNumber.from(number)
-      expiration <- CardExpiration.from(expiration)
-      cvv        <- CardCVV.from(cvv)
+      name       <- CardNamePred.from(name)
+      number     <- CardNumberPred.from(number)
+      expiration <- CardExpirationPred.from(expiration)
+      cvv        <- CardCVVPred.from(cvv)
     } yield Card(CardName(name), CardNumber(number), CardExpiration(expiration), CardCVV(cvv))
 
   toCardOrFirstFail("John", 1234567890123456L, "4444", 333)
 
 
-
-//Für Json En/Decode @derive(decoder, encoder,.. und import:
+  //Laufzeit  Json En/Decode
+  // via @derive(decoder, encoder,.. und import:
   import io.circe.parser.decode
   import io.circe.syntax._
 
 
-  //Encode -> kompaktes bzw. formatiertes Json:
+  //Encode -> kompaktes  Json:
   val asJ = pay1.asJson.noSpaces
   //{"id":"2399b828-6dd5-448a-8ac9-11d20efd3f6d","total":5.1,"card":{"name":"John","number":1234567890123456,"expiration":"4444","cvv":333}}
   println(asJ)
+  //Encode ->  formatiertes Json:
   val asJ1 = pay1.asJson.spaces4SortKeys
   println(asJ1)
 
-  //Decode zu Either[Error, A] -> fail fast mit erstem Fehler + "downstream Felder"
+  //Decode zu Either[Error, A] -> fail fast mit (erstem Fehler + "downstream Felder")
   val payJs = List(
     """{
               |  "id": "031acfc9-9967-4022-9635-66a946e9a433",

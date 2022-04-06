@@ -30,12 +30,12 @@ object checkout {
   type CardExpirationPred = String Refined (Size[4] And ValidInt)
   type CardCVVPred        = Int Refined Size[3]
 
-  object CardNamePred extends RefinedTypeOps[CardNamePred, String]
 
   @derive(decoder, encoder, show)
   @newtype
   case class CardName(value: CardNamePred)
-  object CardName extends RefinedTypeOps[CardNamePred, String]/* {XX
+  object CardNamePred extends RefinedTypeOps[CardNamePred, String]  
+/*  object CardNamePred extends RefinedTypeOps[CardNamePred, String] {XX
     implicit val jsonDecoder: Decoder[CardName] =
       decoderOf[String, MatchesRegex[Rgx]].map( v => CardName(v))
 
@@ -47,34 +47,36 @@ object checkout {
   @derive(decoder, encoder, show)
   @newtype
   case class CardNumber(value: CardNumberPred)
-  object CardNumber extends RefinedTypeOps[CardNumberPred, Long] /*XX{
-    implicit val jsonDecoder: Decoder[CardNumber] =
-      decoderOf[Long, Size[16]].map(CardNumber(_))
-  }*/
+  object CardNumberPred extends RefinedTypeOps[CardNumberPred, Long]{ //XX
+/*def apply(value: CardNumberPred)(implicit ev : CardNumberPred =:= Long Refined Object) = super.apply(value)
+ implicit val jsonDecoder: Decoder[CardNumber] =
+  decoderOf[Long, Size[16]].map(CardNumber(_))
+*/}
 
-  @derive(decoder, encoder, show)
-  @newtype
-  case class CardExpiration(value: CardExpirationPred)
-  object CardExpiration extends RefinedTypeOps[CardExpirationPred, String] /*{XX
-    implicit val jsonDecoder: Decoder[CardExpiration] =
-      decoderOf[String, Size[4] And ValidInt].map(CardExpiration(_))
-  }*/
+@derive(decoder, encoder, show)
+@newtype
+case class CardExpiration(value: CardExpirationPred)
+object CardExpirationPred extends RefinedTypeOps[CardExpirationPred, String] /*{XX
+implicit val jsonDecoder: Decoder[CardExpiration] =
+  decoderOf[String, Size[4] And ValidInt].map(CardExpiration(_))
+}*/
 
-  @derive( encoder, show)
-  @newtype
-  case class CardCVV(value: CardCVVPred)
-  object CardCVV extends RefinedTypeOps[CardCVVPred, Int] {
-    //explizit falls Besionderheit nötig  wäre
-    implicit val jsonDecoder: Decoder[CardCVV] =
-      decoderOf[Int, Size[3]].map(CardCVV(_))
-  }
+@derive( encoder, show)
+@newtype
+case class CardCVV(value: CardCVVPred)
+object CardCVV {
+//explizit falls Besonderheit nötig  wäre
+implicit val jsonDecoder: Decoder[CardCVV] =
+  decoderOf[Int, Size[3]].map(CardCVV(_))
+}
+object CardCVVPred extends RefinedTypeOps[CardCVVPred, Int]
 
-  @derive(decoder, encoder, show)
-  case class Card(
-      name: CardName,
-      number: CardNumber,
-      expiration: CardExpiration,
-      cvv: CardCVV
-  )
+@derive(decoder, encoder, show)
+case class Card(
+                 name: CardName,
+                 number: CardNumber,
+                 expiration: CardExpiration,
+                 cvv: CardCVV
+)
 
 }

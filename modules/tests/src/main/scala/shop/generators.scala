@@ -1,7 +1,8 @@
 package shop
 
-import java.util.UUID
+import cats.{Foldable, Parallel}
 
+import java.util.UUID
 import shop.domain.auth._
 import shop.domain.brand._
 import shop.domain.cart._
@@ -11,7 +12,6 @@ import shop.domain.item._
 import shop.domain.order._
 import shop.domain.payment.Payment
 import shop.http.auth.users._
-
 import eu.timepit.refined.api.Refined
 import eu.timepit.refined.scalacheck.string._
 import eu.timepit.refined.string.ValidBigDecimal
@@ -141,10 +141,12 @@ object generators {
   val cardGen: Gen[Card] =
     for {
       n <- cardNameGen
-      u <- sized(16).map(x => CardNumber(Refined.unsafeApply(x)))
-      x <- sized(4).map(x => CardExpiration(Refined.unsafeApply(x.toString)))
+      u <- sized(16).map(x => CardNumber(Refined.unsafeApply(x)) )
+      //u <- sized(16).map(x =>   CardNumber.from(x))//XX liefert Either -> MonadTransformer für Gen, Either...
+      e <- sized(4).map(x => CardExpiration(Refined.unsafeApply(x.toString))) //.from(x.toString))
       c <- sized(3).map(x => CardCVV(Refined.unsafeApply(x.toInt)))
-    } yield Card(n, u, x, c)
+    } yield    Card(n, u, e, c)
+   // } yield  Parallel.parMap4(na, nu, e, c)((na, nu, e, c) => Card(CardName(na), CardNumber(nu), CardExpiration(e), CardCVV(c)))
 
   // http routes generators
 
