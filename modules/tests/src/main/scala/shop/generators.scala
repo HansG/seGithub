@@ -1,5 +1,6 @@
 package shop
 
+import cats.effect.IO
 import cats.{Foldable, Parallel}
 
 import java.util.UUID
@@ -18,9 +19,14 @@ import eu.timepit.refined.string.ValidBigDecimal
 import eu.timepit.refined.types.string.NonEmptyString
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.Gen
+import shop.http.routes.BrandRoutes
 import squants.market._
+import weaver.SimpleIOSuite
+import weaver.scalacheck.Checkers
 
-object generators {
+import scala.tools.nsc.doc.html.HtmlTags.I
+
+object generators extends App {
 
   val nonEmptyStringGen: Gen[String] =
     Gen
@@ -137,6 +143,27 @@ object generators {
 
     go(0, "")
   }
+
+  //XX
+  object GenSum extends SimpleIOSuite  with Checkers{
+    sealed trait A
+    case class B(b: String) extends A
+    case class C(c: String) extends A
+    val genS =  Gen.stringOf(Gen.oneOf(('a' to 'z') ++ ('A' to 'Z')))
+    val genB =  genS.map (B(_))
+    val genC =  genS.map (C(_))
+    val genA = Gen.oneOf(genB, genC)
+
+
+    def run = test("Show A's") {
+      forall(genA) { a =>
+        IO(println(a.toString))
+        expect.same("A","A")
+      }
+    }
+  }
+
+  GenSum.run
 
   val cardGen: Gen[Card] =
     for {

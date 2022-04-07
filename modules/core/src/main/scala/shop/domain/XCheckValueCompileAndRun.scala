@@ -24,34 +24,41 @@ import skunk.syntax.id
 //Überprüfung von Werten zur Compiletime - und Runtime
 object XCheckValueCompileAndRun extends App {
 
-  type Word = String Refined MatchesRegex[W.`"[a-zA-Z]*"`.T]
-  //statt W...
   type Rgx   = "[a-zA-Z]*";
-  type Word1 = String Refined MatchesRegex[Rgx]
-  //Compiletime
-  def lookup(username: Word): Option[Word] = None
-  lookup("aeinstein")
-  //einfach
-  identity[Word]("aeinstein")
-//für Laufzeit
+  type Word = String Refined MatchesRegex[Rgx]
+  //oder  spezielle Syntax: W...T
+  type Word1 = String Refined MatchesRegex[W.`"[a-zA-Z]*"`.T]
+
+  // Companion-Objekt mit Konstruktoren
   object Word extends RefinedTypeOps[Word, String] //MatchesRegex[Rgx]
-  val w = Word.from("aeinstein"): Either[String, Word]
-  //nur für Compiletime mit String-Literal:
-  val w1 = Word("aeinstein"):  Word
+   //Validierung zur Compiletime nur  mit String-Literal:
+  val w1 = Word("aeinstein"):  Word  //Konstruktor , hier kein Either nötig
+  def lookup(username: Word): Option[Word] = None //Parameter Konvertierung
+  lookup("aeinstein")
+  //mit Std identity
+  identity[Word]("aeinstein")
+//für Laufzeit Either-Konstruktor
+  val param = "aeinstein"
+  val w = Word.from(param): Either[String, Word]
+  //falls z.B. für Testdaten kein Either erwünscht:
+  val wu : Word = Refined.unsafeApply(param) //Parameter Konvertierung möglich
+  //damit Testdaten valide: -> Standard-Gen: vgl. modules/tests/src/main/scala/shop/generators.scala    z.B.
+  // MatchesRegex[Rgx] -> Gen.stringOf(Gen.oneOf(('a' to 'z') ++ ('A' to 'Z')))
+  // (MinSize[21] And MaxSize[40]) -> Gen.chooseNum(21, 40).flatMap { n => Gen.buildableOfN[String, Char](n, Gen.alphaChar) }
+  //(Size[4] And ValidInt)  -> generators.sized(size: Int): Gen[Int]
 
 
-  //oder ohne explizites object, direkt als Methode mit expliziten Typ T und P
+  //für Laufzeit Either-Konstruktor  ohne explizites "object Word", direkt als Methode mit expliziten Typ T und P
   def toRefined[T,P](t: T)(implicit valV:  Validate[T, P]): Either[String,  T Refined P] = refineV[P].apply[T](t)(valV)
-  toRefined[String, MatchesRegex[Rgx]]("aeinstein")
+  val wtp = toRefined[String, MatchesRegex[Rgx]]("aeinstein") : Either[String, Word]  //Word =:= String Refined MatchesRegex[Rgx] nötig!?
 
-  //oder ohne explizites object, jedoch mit expliziten Typ T und RTP
+  //aufzeit Either-Konstruktor ohne explizites object, jedoch mit expliziten Typ T und RTP
   def ToRefined[T,RTP](implicit  rt: RefinedType.AuxT[RTP, T])  = new  RefinedTypeOps[RTP, T]
   val p3 = ToRefined[String, Word].from("aeinstein")
-
-  //oder ohne explizites object, jedoch mit expliziten Typ T und P
+  //dasselbe, jedoch mit expliziten Typ T und P ( RTP wird abgleitet -> T Refined P)
   implicit def ToRefined1[T,P](implicit  rt: RefinedType.AuxT[T Refined P, T])  = new  RefinedTypeOps[T Refined P, T]
-  val p1 = ToRefined1[String,MatchesRegex[W.`"[a-zA-Z]*"`.T]].from("aeinstein")
-  val p2 = ToRefined1[String, MatchesRegex[Rgx]].from("aeinstein")
+  val p1 = ToRefined1[String,MatchesRegex[W.`"[a-zA-Z]*"`.T]].from("aeinstein") : Either[String, Word]
+  val p2 = ToRefined1[String, MatchesRegex[Rgx]].from("aeinstein") : Either[String, Word]
 
 
   //mit cast zu Option[T]
@@ -77,7 +84,13 @@ object XCheckValueCompileAndRun extends App {
 
     }
 
-//weitere Beispiele:
+  /* Beispiele für Standard Predicates:
+  boolean: Not[P], Or[P1, P2], And[P1, P2], AllOf[Ps], AnyOf[Ps]
+numeric: Greater[x], LessEqual[x], interval.OpenClosed[xMin, xMax]
+collections: MinSize[x], Forall[P], Exists[P]
+strings: EndsWith[s], MatchesRegex[s], Contains[s], Url, ValidFloat
+   */
+//Anwendungsbeispiele:
   type Username = String Refined Contains['g']
   //Compiletime
   def lookupu(username: Username): Option[Username] = None
