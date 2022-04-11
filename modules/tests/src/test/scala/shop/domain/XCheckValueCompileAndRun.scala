@@ -1,25 +1,22 @@
 package shop.domain
 
-import eu.timepit.refined.cats.syntax.CatsRefinedTypeOps
-import eu.timepit.refined.string.{MatchesRegex, ValidInt}
-import eu.timepit.refined.numeric.{Greater, Interval}
-import eu.timepit.refined.boolean.{And, Not}
-import eu.timepit.refined.collection.{Contains, Forall }
-import eu.timepit.refined.{W, refineV}
-import eu.timepit.refined.generic._
-import eu.timepit.refined.predicates.all.{NonEmpty, Size}
-import eu.timepit.refined.api.RefType.refinedRefType
-import eu.timepit.refined.api.{Refined, _}
-import eu.timepit.refined.auto._
-import eu.timepit.refined.types.string.NonEmptyString
-import cats.effect._
-import cats.data.{EitherNel, Validated, ValidatedNel}
-import Validated._
+import cats.data.Validated._
+import cats.data.{EitherNel, ValidatedNel}
 import cats.implicits._
-import io.estatico.newtype.macros._
+import eu.timepit.refined.api.RefType.refinedRefType
+import eu.timepit.refined.api._
+import eu.timepit.refined.auto._
+import eu.timepit.refined.boolean.{And, Not}
+import eu.timepit.refined.cats.syntax.CatsRefinedTypeOps
+import eu.timepit.refined.collection.{Contains, Forall}
+import eu.timepit.refined.generic._
+import eu.timepit.refined.numeric.{Greater, Interval}
+import eu.timepit.refined.predicates.all.{NonEmpty, Size}
+import eu.timepit.refined.string.{MatchesRegex, ValidInt}
+import eu.timepit.refined.types.string.NonEmptyString
+import eu.timepit.refined.{W, refineV}
 import shapeless._
-import skunk.syntax.id
-import skunk.syntax.id
+import shop.domain.brand.Brand
 
 //Überprüfung von Werten zur Compiletime - und Runtime
 object XCheckValueCompileAndRun extends App {
@@ -33,26 +30,36 @@ object XCheckValueCompileAndRun extends App {
   object Word extends RefinedTypeOps[Word, String] //MatchesRegex[Rgx]
    //Validierung zur Compiletime nur  mit String-Literal:
   val w1 = Word("aeinstein"):  Word  //Konstruktor , hier kein Either nötig
-  def lookup(username: Word): Option[Word] = None //Parameter Konvertierung
-  lookup("aeinstein")
-  //mit Std identity
-  identity[Word]("aeinstein")
+
+  //dasselbe ohne explizites Object Word
+  //direkt mit Std-Methode identity: konvertiert String -> Word:
+  val w3 = identity[Word]("aeinstein")
+  def id[A](a:A) = a
+  //damit z.B.
+  case class Sentence(wds : Word*)
+  Sentence(id[Word]("John"), id[Word]("adi"))
+
 //für Laufzeit Either-Konstruktor
   val param = "aeinstein"
   val w = Word.from(param): Either[String, Word]
+
   //falls z.B. für Testdaten kein Either erwünscht:
-  val wu : Word = Refined.unsafeApply(param) //Parameter Konvertierung möglich
+  def w2 : Word = Refined.unsafeApply(param) //Parameter Konvertierung möglich
   //damit Testdaten valide: -> Standard-Gen: vgl. modules/tests/src/main/scala/shop/generators.scala    z.B.
-  // MatchesRegex[Rgx] -> Gen.stringOf(Gen.oneOf(('a' to 'z') ++ ('A' to 'Z')))
-  // (MinSize[21] And MaxSize[40]) -> Gen.chooseNum(21, 40).flatMap { n => Gen.buildableOfN[String, Char](n, Gen.alphaChar) }
   //(Size[4] And ValidInt)  -> generators.sized(size: Int): Gen[Int]
+  import org.scalacheck.Gen
+    //vgl. shop.generators.nonEmptyStringGen.map(toWord)
+  val wordGen: Gen[Word] =  Gen.stringOf(Gen.oneOf(('a' to 'z') ++ ('A' to 'Z'))).map(Refined.unsafeApply)
+  val neWordListGen: Gen[List[Word]] = Gen
+    .chooseNum(1, 10)
+    .flatMap { n => Gen.buildableOfN[List[Word], Word](n, wordGen) }
 
 
   //für Laufzeit Either-Konstruktor  ohne explizites "object Word", direkt als Methode mit expliziten Typ T und P
   def toRefined[T,P](t: T)(implicit valV:  Validate[T, P]): Either[String,  T Refined P] = refineV[P].apply[T](t)(valV)
   val wtp = toRefined[String, MatchesRegex[Rgx]]("aeinstein") : Either[String, Word]  //Word =:= String Refined MatchesRegex[Rgx] nötig!?
 
-  //aufzeit Either-Konstruktor ohne explizites object, jedoch mit expliziten Typ T und RTP
+  //Laufzeit Either-Konstruktor ohne explizites object, jedoch mit expliziten Typ T und RTP
   def ToRefined[T,RTP](implicit  rt: RefinedType.AuxT[RTP, T])  = new  RefinedTypeOps[RTP, T]
   val p3 = ToRefined[String, Word].from("aeinstein")
   //dasselbe, jedoch mit expliziten Typ T und P ( RTP wird abgleitet -> T Refined P)
@@ -99,6 +106,10 @@ strings: EndsWith[s], MatchesRegex[s], Contains[s], Url, ValidFloat
   // implicit def urlValidate: Validate [String, Username] =  ???
   //  implicit def toU(s : String) = autoRefineT[String, Username](s)
 
+ //Predicate Produkt
+ type SizedInt = String Refined (Size[4] And ValidInt)
+  type Username0 = String Refined (Contains['g'] And Size[4])
+
   type OneToTen = Int Refined Interval.Closed[W.`1`.T, W.`10`.T]
   //Compiletime
   def see(n: OneToTen): Option[OneToTen] = None
@@ -118,9 +129,6 @@ strings: EndsWith[s], MatchesRegex[s], Contains[s], Url, ValidFloat
   val number: Int                   = 33
   val res33: Either[String, GTFive] = GTFive.from(number)
 
-  //vertikale Kombi
-  type SizedInt = String Refined (Size[4] And ValidInt)
-  type Username0 = String Refined (Contains['g'] And Size[4])
 
   // COmpile  funktioniert nicht todo RUntime
   type Username1 = Username Refined Size[5]

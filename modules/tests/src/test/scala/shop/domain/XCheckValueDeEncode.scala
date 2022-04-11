@@ -1,19 +1,12 @@
 package shop.domain
 
 import cats.Parallel
-import eu.timepit.refined.{ api, refineV }
-import eu.timepit.refined.api.Refined
-import eu.timepit.refined.predicates.all.NonEmpty
-import eu.timepit.refined.string.MatchesRegex
-import eu.timepit.refined.types.all.NonEmptyString
 import shop.domain.auth.UserId
 import shop.domain.checkout._
 import shop.domain.payment.Payment
-import shop.http.auth.users.User
 import squants.market.USD
 
 import java.util.UUID
-import shop.ext.refined._
 //import eu.timepit.refined.api._
 //import eu.timepit.refined.auto._
 

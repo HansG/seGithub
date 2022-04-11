@@ -24,5 +24,5 @@ object refined {
 
   implicit def showOf[T, P](implicit d: Show[T]): Show[T Refined P] =
     Show.show( (rtp: T Refined P) =>  d.show( rtp.value))
-
+    //Show[T].contraMap[T Refined P](_.value)
 }

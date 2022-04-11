@@ -1,7 +1,7 @@
 package shop
 
 import cats.effect.IO
-import cats.{Foldable, Parallel}
+import cats.{Foldable, Parallel, Show}
 
 import java.util.UUID
 import shop.domain.auth._
@@ -149,6 +149,9 @@ object generators extends App {
     sealed trait A
     case class B(b: String) extends A
     case class C(c: String) extends A
+    object A {
+      implicit def toShow : Show[A with Product] =
+    }
     val genS =  Gen.stringOf(Gen.oneOf(('a' to 'z') ++ ('A' to 'Z')))
     val genB =  genS.map (B(_))
     val genC =  genS.map (C(_))
