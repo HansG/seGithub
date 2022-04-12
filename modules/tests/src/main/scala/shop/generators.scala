@@ -28,7 +28,7 @@ import scala.tools.nsc.doc.html.HtmlTags.I
 
 object generators extends App {
 
-  val nonEmptyStringGen: Gen[String] =
+  lazy val nonEmptyStringGen: Gen[String] =
     Gen
       .chooseNum(21, 40)
       .flatMap { n =>
@@ -41,64 +41,64 @@ object generators extends App {
   def idGen[A](f: UUID => A): Gen[A] =
     Gen.uuid.map(f)
 
-  val brandIdGen: Gen[BrandId] =
+  lazy val brandIdGen: Gen[BrandId] =
     idGen(BrandId.apply)
 
-  val brandNameGen: Gen[BrandName] =
+  lazy val brandNameGen: Gen[BrandName] =
     nesGen(BrandName.apply)
 
-  val categoryIdGen: Gen[CategoryId] =
+  lazy val categoryIdGen: Gen[CategoryId] =
     idGen(CategoryId.apply)
 
-  val categoryNameGen: Gen[CategoryName] =
+  lazy val categoryNameGen: Gen[CategoryName] =
     nesGen(CategoryName.apply)
 
-  val itemIdGen: Gen[ItemId] =
+  lazy val itemIdGen: Gen[ItemId] =
     idGen(ItemId.apply)
 
-  val itemNameGen: Gen[ItemName] =
+  lazy val itemNameGen: Gen[ItemName] =
     nesGen(ItemName.apply)
 
-  val itemDescriptionGen: Gen[ItemDescription] =
+  lazy val itemDescriptionGen: Gen[ItemDescription] =
     nesGen(ItemDescription.apply)
 
-  val userIdGen: Gen[UserId] =
+  lazy val userIdGen: Gen[UserId] =
     idGen(UserId.apply)
 
-  val orderIdGen: Gen[OrderId] =
+  lazy val orderIdGen: Gen[OrderId] =
     idGen(OrderId.apply)
 
-  val paymentIdGen: Gen[PaymentId] =
+  lazy val paymentIdGen: Gen[PaymentId] =
     idGen(PaymentId.apply)
 
-  val userNameGen: Gen[UserName] =
+  lazy val userNameGen: Gen[UserName] =
     nesGen(UserName.apply)
 
-  val passwordGen: Gen[Password] =
+  lazy val passwordGen: Gen[Password] =
     nesGen(Password.apply)
 
-  val encryptedPasswordGen: Gen[EncryptedPassword] =
+  lazy val encryptedPasswordGen: Gen[EncryptedPassword] =
     nesGen(EncryptedPassword.apply)
 
-  val quantityGen: Gen[Quantity] =
+  lazy val quantityGen: Gen[Quantity] =
     Gen.posNum[Int].map(Quantity.apply)
 
-  val moneyGen: Gen[Money] =
+  lazy val moneyGen: Gen[Money] =
     Gen.posNum[Long].map(n => USD(BigDecimal(n)))
 
-  val brandGen: Gen[Brand] =
+  lazy val brandGen: Gen[Brand] =
     for {
       i <- brandIdGen
       n <- brandNameGen
     } yield Brand(i, n)
 
-  val categoryGen: Gen[Category] =
+  lazy val categoryGen: Gen[Category] =
     for {
       i <- categoryIdGen
       n <- categoryNameGen
     } yield Category(i, n)
 
-  val itemGen: Gen[Item] =
+  lazy val itemGen: Gen[Item] =
     for {
       i <- itemIdGen
       n <- itemNameGen
@@ -108,28 +108,28 @@ object generators extends App {
       c <- categoryGen
     } yield Item(i, n, d, p, b, c)
 
-  val cartItemGen: Gen[CartItem] =
+  lazy val cartItemGen: Gen[CartItem] =
     for {
       i <- itemGen
       q <- quantityGen
     } yield CartItem(i, q)
 
-  val cartTotalGen: Gen[CartTotal] =
+  lazy val cartTotalGen: Gen[CartTotal] =
     for {
       i <- Gen.nonEmptyListOf(cartItemGen)
       t <- moneyGen
     } yield CartTotal(i, t)
 
-  val itemMapGen: Gen[(ItemId, Quantity)] =
+  lazy val itemMapGen: Gen[(ItemId, Quantity)] =
     for {
       i <- itemIdGen
       q <- quantityGen
     } yield i -> q
 
-  val cartGen: Gen[Cart] =
+  lazy val cartGen: Gen[Cart] =
     Gen.nonEmptyMap(itemMapGen).map(Cart.apply)
 
-  val cardNameGen: Gen[CardName] =
+  lazy val cardNameGen: Gen[CardName] =
     Gen.stringOf(Gen.oneOf(('a' to 'z') ++ ('A' to 'Z'))).map { x =>
       CardName(Refined.unsafeApply(x))
     }
@@ -144,31 +144,8 @@ object generators extends App {
     go(0, "")
   }
 
-  //XX
-  object GenSum extends SimpleIOSuite  with Checkers{
-    sealed trait A
-    case class B(b: String) extends A
-    case class C(c: String) extends A
-    object A {
-      implicit def toShow : Show[A with Product] =
-    }
-    val genS =  Gen.stringOf(Gen.oneOf(('a' to 'z') ++ ('A' to 'Z')))
-    val genB =  genS.map (B(_))
-    val genC =  genS.map (C(_))
-    val genA = Gen.oneOf(genB, genC)
 
-
-    def run = test("Show A's") {
-      forall(genA) { a =>
-        IO(println(a.toString))
-        expect.same("A","A")
-      }
-    }
-  }
-
-  GenSum.run
-
-  val cardGen: Gen[Card] =
+  lazy val cardGen: Gen[Card] =
     for {
       n <- cardNameGen
       u <- sized(16).map(x => CardNumber(Refined.unsafeApply(x)) )
@@ -180,29 +157,29 @@ object generators extends App {
 
   // http routes generators
 
-  val userGen: Gen[User] =
+  lazy val userGen: Gen[User] =
     for {
       i <- userIdGen
       n <- userNameGen
     } yield User(i, n)
 
-  val adminUserGen: Gen[AdminUser] =
+  lazy val adminUserGen: Gen[AdminUser] =
     userGen.map(AdminUser(_))
 
-  val commonUserGen: Gen[CommonUser] =
+  lazy val commonUserGen: Gen[CommonUser] =
     userGen.map(CommonUser(_))
 
-  val paymentGen: Gen[Payment] =
+  lazy val paymentGen: Gen[Payment] =
     for {
       i <- userIdGen
       m <- moneyGen
       c <- cardGen
     } yield Payment(i, m, c)
 
-  val brandParamGen: Gen[BrandParam] =
+  lazy val brandParamGen: Gen[BrandParam] =
     arbitrary[NonEmptyString].map(BrandParam(_))
 
-  val createItemParamGen: Gen[CreateItemParam] =
+  lazy val createItemParamGen: Gen[CreateItemParam] =
     for {
       n <- arbitrary[NonEmptyString].map(ItemNameParam(_))
       d <- arbitrary[NonEmptyString].map(ItemDescriptionParam(_))

@@ -1,10 +1,16 @@
 package shop.domain
 
-import cats.Parallel
+import cats.effect.{ExitCode, IO, IOApp}
+import cats.{Parallel, Show}
+import org.scalacheck.Gen
+import shop.domain.XCheckValueDeEncode.GenSum
 import shop.domain.auth.UserId
 import shop.domain.checkout._
 import shop.domain.payment.Payment
+import shop.http.routes.ExampleSuite
 import squants.market.USD
+import weaver.{SimpleIOSuite, TestOutcome}
+import weaver.scalacheck.Checkers
 
 import java.util.UUID
 //import eu.timepit.refined.api._
@@ -20,11 +26,12 @@ object XCheckValueDeEncode extends App {
   //paralleles Produkt-Parsen: Ergebnis Produkttyp oder Produkt/Liste der Fehler:
   def toCardOrFails(name: String, number: Long, expiration: String, cvv: Int) =
     Parallel.parMap4(
-      CardNamePred.from(name),
-      CardNumberPred.from(number),
-      CardExpirationPred.from(expiration),
-      CardCVVPred.from(cvv)
-    )((na, nu, e, c) => Card(CardName(na), CardNumber(nu), CardExpiration(e), CardCVV(c)))
+      CardNamePred.from(name).map(CardName(_)),
+      CardNumberPred.from(number).map(CardNumber(_)),
+      CardExpirationPred.from(expiration).map(CardExpiration(_)),
+      CardCVVPred.from(cvv).map(CardCVV(_))
+  //  )(Card)
+   )(Card(_,  _, _, _))
 
   private val card1: Either[String, Card] = toCardOrFails("John", 1234567890123456L, "4444", 333)
   println("Card: " + card1) //Card: Right(Card(John,1234567890123456,4444,333))
@@ -49,6 +56,32 @@ object XCheckValueDeEncode extends App {
     } yield Card(CardName(name), CardNumber(number), CardExpiration(expiration), CardCVV(cvv))
 
   toCardOrFirstFail("John", 1234567890123456L, "4444", 333)
+
+
+  // Summe-Gen
+  object GenSum extends SimpleIOSuite  with Checkers {
+
+    sealed trait A extends Product with java.io.Serializable
+    case class B(b: String) extends A
+    case class C(c: String) extends A
+
+
+    val genS =  Gen.stringOf(Gen.oneOf(('a' to 'z') ++ ('A' to 'Z')))
+    val genB =  genS.map (B(_))
+    val genC =  genS.map (C(_))
+    val genA = Gen.oneOf(genB, genC)
+
+    implicit def toShow : Show[A] = Show.fromToString
+
+    test("Show A's") {
+      forall(genA) { a =>
+        IO(println(a))
+        expect.same("A","A")
+      }
+    }
+  }
+
+
 
 
   //Laufzeit  Json En/Decode
@@ -119,6 +152,15 @@ object XCheckValueDeEncode extends App {
 
 
 }
+
+
+
+object StartEx extends IOApp {
+  override def run(args: List[String]): IO[ExitCode] = GenSum.run(List("a", "b")) { (to:TestOutcome) =>
+    IO(println(to))
+  }.as[ExitCode](ExitCode.Success)
+}
+
 /*
 
 

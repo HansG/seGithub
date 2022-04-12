@@ -15,6 +15,7 @@ import eu.timepit.refined.predicates.all.{NonEmpty, Size}
 import eu.timepit.refined.string.{MatchesRegex, ValidInt}
 import eu.timepit.refined.types.string.NonEmptyString
 import eu.timepit.refined.{W, refineV}
+import io.estatico.newtype.macros.newtype
 import shapeless._
 import shop.domain.brand.Brand
 
@@ -22,74 +23,62 @@ import shop.domain.brand.Brand
 object XCheckValueCompileAndRun extends App {
 
   type Rgx   = "[a-zA-Z]*";
-  type Word = String Refined MatchesRegex[Rgx]
+  type WordPred = String Refined MatchesRegex[Rgx]
   //oder  spezielle Syntax: W...T
-  type Word1 = String Refined MatchesRegex[W.`"[a-zA-Z]*"`.T]
+  type WordPred1 = String Refined MatchesRegex[W.`"[a-zA-Z]*"`.T]
 
   // Companion-Objekt mit Konstruktoren
-  object Word extends RefinedTypeOps[Word, String] //MatchesRegex[Rgx]
+  object WordPred extends RefinedTypeOps[WordPred, String] //MatchesRegex[Rgx]
    //Validierung zur Compiletime nur  mit String-Literal:
-  val w1 = Word("aeinstein"):  Word  //Konstruktor , hier kein Either nötig
+  val w1 = WordPred("aeinstein"):  WordPred  //Konstruktor , hier kein Either nötig
 
   //dasselbe ohne explizites Object Word
   //direkt mit Std-Methode identity: konvertiert String -> Word:
-  val w3 = identity[Word]("aeinstein")
+  val w3 = identity[WordPred]("aeinstein")
   def id[A](a:A) = a
   //damit z.B.
-  case class Sentence(wds : Word*)
-  Sentence(id[Word]("John"), id[Word]("adi"))
+  case class Sentence(wds : WordPred*)
+  Sentence(id[WordPred]("John"), id[WordPred]("adi"))
 
 //für Laufzeit Either-Konstruktor
   val param = "aeinstein"
-  val w = Word.from(param): Either[String, Word]
+  val w = WordPred.from(param): Either[String, WordPred]
 
   //falls z.B. für Testdaten kein Either erwünscht:
-  def w2 : Word = Refined.unsafeApply(param) //Parameter Konvertierung möglich
+  def w2 : WordPred = Refined.unsafeApply(param) //Parameter Konvertierung möglich
   //damit Testdaten valide: -> Standard-Gen: vgl. modules/tests/src/main/scala/shop/generators.scala    z.B.
   //(Size[4] And ValidInt)  -> generators.sized(size: Int): Gen[Int]
   import org.scalacheck.Gen
     //vgl. shop.generators.nonEmptyStringGen.map(toWord)
-  val wordGen: Gen[Word] =  Gen.stringOf(Gen.oneOf(('a' to 'z') ++ ('A' to 'Z'))).map(Refined.unsafeApply)
-  val neWordListGen: Gen[List[Word]] = Gen
+  val wordGen: Gen[WordPred] =  Gen.stringOf(Gen.oneOf(('a' to 'z') ++ ('A' to 'Z'))).map(Refined.unsafeApply)
+  val neWordListGen: Gen[List[WordPred]] = Gen
     .chooseNum(1, 10)
-    .flatMap { n => Gen.buildableOfN[List[Word], Word](n, wordGen) }
+    .flatMap { n => Gen.buildableOfN[List[WordPred], WordPred](n, wordGen) }
 
 
   //für Laufzeit Either-Konstruktor  ohne explizites "object Word", direkt als Methode mit expliziten Typ T und P
   def toRefined[T,P](t: T)(implicit valV:  Validate[T, P]): Either[String,  T Refined P] = refineV[P].apply[T](t)(valV)
-  val wtp = toRefined[String, MatchesRegex[Rgx]]("aeinstein") : Either[String, Word]  //Word =:= String Refined MatchesRegex[Rgx] nötig!?
+  val wtp = toRefined[String, MatchesRegex[Rgx]]("aeinstein") : Either[String, WordPred]  //Word =:= String Refined MatchesRegex[Rgx] nötig!?
 
   //Laufzeit Either-Konstruktor ohne explizites object, jedoch mit expliziten Typ T und RTP
   def ToRefined[T,RTP](implicit  rt: RefinedType.AuxT[RTP, T])  = new  RefinedTypeOps[RTP, T]
-  val p3 = ToRefined[String, Word].from("aeinstein")
+  val p3 = ToRefined[String, WordPred].from("aeinstein")
   //dasselbe, jedoch mit expliziten Typ T und P ( RTP wird abgleitet -> T Refined P)
   implicit def ToRefined1[T,P](implicit  rt: RefinedType.AuxT[T Refined P, T])  = new  RefinedTypeOps[T Refined P, T]
-  val p1 = ToRefined1[String,MatchesRegex[W.`"[a-zA-Z]*"`.T]].from("aeinstein") : Either[String, Word]
-  val p2 = ToRefined1[String, MatchesRegex[Rgx]].from("aeinstein") : Either[String, Word]
+  val p1 = ToRefined1[String,MatchesRegex[W.`"[a-zA-Z]*"`.T]].from("aeinstein") : Either[String, WordPred]
+  val p2 = ToRefined1[String, MatchesRegex[Rgx]].from("aeinstein") : Either[String, WordPred]
+
+  def TR[T, P](t : T)(implicit  rt: RefinedType.AuxT[T Refined P, T]) = ToRefined1[T,P].from(t)
+  val p5 = TR[String, MatchesRegex[Rgx]]("1aeinstein")
+
+  @newtype
+  case class Chef(name : WordPred)
+  @newtype
+  case class Hausl(name : WordPred)
+  case class KommInfo(chef : Chef, hausl : Hausl)
+  val komi = KommInfo(Chef("Schmaus"), Hausl("Christl"))
 
 
-  //mit cast zu Option[T]
-  def castt[T](value: Any)(implicit T: Typeable[T]): Option[T] = T.cast(value)
-  val pt = castt[Word]("aeinstein")
-  //behebt:-> No default Typeable for parametrized type  Word
-  implicit def refTypeable[T,P](implicit castT:  Typeable[T], valV:  Validate[T, P]): Typeable[T Refined P] =
-    new Typeable[T Refined P] {
-      def cast(t: Any): Option[T Refined P] = {
-        if(t == null) None
-        else  {
-          castT.cast(t) match {
-            case None => None
-            case ot => refineV[P].apply[T](ot.get) match {
-                        case Left(_) => None
-                        case Right(rv) => Some(rv)
-                      }
-          }
-        }
-      }
-
-      def describe: String = castT.describe + " validate: "+valV
-
-    }
 
   /* Beispiele für Standard Predicates:
   boolean: Not[P], Or[P1, P2], And[P1, P2], AllOf[Ps], AnyOf[Ps]
@@ -161,5 +150,32 @@ strings: EndsWith[s], MatchesRegex[s], Contains[s], Url, ValidFloat
   fiveModTen + nineModTen // OK == Residue[10](4)
   val fourModEleven = Residue[10](4)
   fiveModTen + fourModEleven // compiler error:
+
+
+
+
+
+  //mit cast zu Option[T]
+  def castt[T](value: Any)(implicit T: Typeable[T]): Option[T] = T.cast(value)
+  val pt = castt[WordPred]("aeinstein")
+  //behebt:-> No default Typeable for parametrized type  Word
+  implicit def refTypeable[T,P](implicit castT:  Typeable[T], valV:  Validate[T, P]): Typeable[T Refined P] =
+    new Typeable[T Refined P] {
+      def cast(t: Any): Option[T Refined P] = {
+        if(t == null) None
+        else  {
+          castT.cast(t) match {
+            case None => None
+            case ot => refineV[P].apply[T](ot.get) match {
+              case Left(_) => None
+              case Right(rv) => Some(rv)
+            }
+          }
+        }
+      }
+
+      def describe: String = castT.describe + " validate: "+valV
+
+    }
 
 }
