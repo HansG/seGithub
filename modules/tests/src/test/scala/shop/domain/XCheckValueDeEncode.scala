@@ -1,16 +1,16 @@
 package shop.domain
 
-import cats.effect.{ExitCode, IO, IOApp}
-import cats.{Parallel, Show}
+import cats.effect.{ ExitCode, IO, IOApp }
+import cats.{ Parallel, Show }
+import eu.timepit.refined.api.Refined
 import org.scalacheck.Gen
-import shop.domain.XCheckValueDeEncode.GenSum
+import shop.domain.XCheckValueCompileAndRun.WordPred
 import shop.domain.auth.UserId
 import shop.domain.checkout._
 import shop.domain.payment.Payment
-import shop.http.routes.ExampleSuite
 import squants.market.USD
-import weaver.{SimpleIOSuite, TestOutcome}
 import weaver.scalacheck.Checkers
+import weaver.{ SimpleIOSuite, TestOutcome }
 
 import java.util.UUID
 //import eu.timepit.refined.api._
@@ -18,8 +18,8 @@ import java.util.UUID
 
 object XCheckValueDeEncode extends App {
 
-   val cn : CardNamePred = CardNamePred("Nawe")
- //  val cn1 = CardNameP(" nnn") Predicate failed
+  val cn: CardNamePred = CardNamePred("Nawe")
+  //  val cn1 = CardNameP(" nnn") Predicate failed
 
   //Laufzeit Parser/Konstruktor:
 
@@ -30,8 +30,8 @@ object XCheckValueDeEncode extends App {
       CardNumberPred.from(number).map(CardNumber(_)),
       CardExpirationPred.from(expiration).map(CardExpiration(_)),
       CardCVVPred.from(cvv).map(CardCVV(_))
-  //  )(Card)
-   )(Card(_,  _, _, _))
+      //  )(Card)
+    )(Card(_, _, _, _))
 
   private val card1: Either[String, Card] = toCardOrFails("John", 1234567890123456L, "4444", 333)
   println("Card: " + card1) //Card: Right(Card(John,1234567890123456,4444,333))
@@ -43,7 +43,7 @@ object XCheckValueDeEncode extends App {
   println("Card: " + card2)
 
   val pay1 = Payment(UserId(UUID.randomUUID()), USD(5.10), card2.getOrElse(card1.getOrElse(???)))
- // Payment: Payment(daf6b0f0-7400-476d-83de-2178603c39c5,5.1 USD,Card(John,1234567890123456,4444,333))
+  // Payment: Payment(daf6b0f0-7400-476d-83de-2178603c39c5,5.1 USD,Card(John,1234567890123456,4444,333))
   println("Payment: " + pay1)
 
   //sequentielles Produkt-Parsen: Ergebnis Produkttyp oder erster Fehler (fail fast):
@@ -57,38 +57,55 @@ object XCheckValueDeEncode extends App {
 
   toCardOrFirstFail("John", 1234567890123456L, "4444", 333)
 
+  import org.scalacheck.Gen
+  //vgl. shop.generators.nonEmptyStringGen.map(toWord)
+  val stringGen: Gen[String] = Gen.stringOf(Gen.alphaChar)
+  lazy val stringGent: Gen[String] = Gen
+    .chooseNum(11, 25)
+    .flatMap(n => Gen.buildableOfN[String, Char](n, Gen.alphaChar))
 
-  // Summe-Gen
-  object GenSum extends SimpleIOSuite  with Checkers {
-
-    sealed trait A extends Product with java.io.Serializable
-    case class B(b: String) extends A
-    case class C(c: String) extends A
-
-
-    val genS =  Gen.stringOf(Gen.oneOf(('a' to 'z') ++ ('A' to 'Z')))
-    val genB =  genS.map (B(_))
-    val genC =  genS.map (C(_))
-    val genA = Gen.oneOf(genB, genC)
-
-    implicit def toShow : Show[A] = Show.fromToString
-
-    test("Show A's") {
-      forall(genA) { a =>
-        IO(println(a))
-        expect.same("A","A")
-      }
+  private def sizedNum(size: Int): Gen[String] = {
+    def go(s: Int, acc: String): Gen[String] = Gen.oneOf(1 to 9).flatMap { n =>
+      if (s == size) acc
+      else go(s + 1, acc + n.toString)
     }
+    go(0, "")
   }
 
+  lazy val cardGen: Gen[Card] =
+    for {
+      n <- stringGent.map(x => CardName(Refined.unsafeApply(x)))
+      u <- sizedNum(16).map(x => CardNumber(Refined.unsafeApply(x.toLong)))
+      e <- sizedNum(4).map(x => CardExpiration(Refined.unsafeApply(x)))
+      c <- sizedNum(3).map(x => CardCVV(Refined.unsafeApply(x.toInt)))
+    } yield Card(n, u, e, c)
 
+
+  lazy val neWordListGen: Gen[List[Card]] = Gen
+    .chooseNum(1, 5)
+    .flatMap { n =>
+      Gen.buildableOfN[List[Card], Card](n, cardGen)
+    }
+  //  Gen.buildableOfN[List[WordPred], WordPred](n, stringGent.map(Refined.unsafeApply(_)))
+
+  //todo -> 2022XX   arbitrary ... Testserver mit Mockdaten hinschicken/abholen
+  //für datenbank (de)serialisieren  client/json (de)serialisieren   eigenes Protokoll mit ODER/UND (de)serialisieren
+  
+  // Summe-Gen
+
+  sealed trait A          extends Product with java.io.Serializable
+  case class B(b: String) extends A
+  case class C(c: String) extends A
+
+  lazy val genB = stringGent.map(B(_))
+  lazy val genC = stringGent.map(C(_))
+  lazy val genA = Gen.oneOf(genB, genC)
 
 
   //Laufzeit  Json En/Decode
   // via @derive(decoder, encoder,.. und import:
   import io.circe.parser.decode
   import io.circe.syntax._
-
 
   //Encode -> kompaktes  Json:
   val asJ = pay1.asJson.noSpaces
@@ -109,8 +126,7 @@ object XCheckValueDeEncode extends App {
               |    "expiration": "4444",
               |    "cvv": 333
               |  }
-              |}""".stripMargin
-    ,//Right(Payment(031acfc9-9967-4022-9635-66a946e9a433,57.1 USD,Card(John,1234567890123456,4444,333)))
+              |}""".stripMargin, //Right(Payment(031acfc9-9967-4022-9635-66a946e9a433,57.1 USD,Card(John,1234567890123456,4444,333)))
     """{
               |  "id": "031acfc9-9967-4022-9635-66a946e9a433",
               |  "total": 57.1,
@@ -120,8 +136,7 @@ object XCheckValueDeEncode extends App {
               |    "expiration": "444",
               |    "cvv": 333
               |  }
-              |}""".stripMargin
-    ,//Left(DecodingFailure(Predicate failed: " John".matches("^[a-zA-Z]+(([',. -][a-zA-Z ])?[a-zA-Z]*)*$")., List(DownField(name), DownField(card))))
+              |}""".stripMargin, //Left(DecodingFailure(Predicate failed: " John".matches("^[a-zA-Z]+(([',. -][a-zA-Z ])?[a-zA-Z]*)*$")., List(DownField(name), DownField(card))))
     """{
               |  "id": "031acfc9-9967-4022-9635-66a946e9a433",
               |  "total": 57.1,
@@ -131,9 +146,8 @@ object XCheckValueDeEncode extends App {
               |    "expiration": "444",
               |    "cvv": 333
               |  }
-              |}""".stripMargin
-    ,//Left(DecodingFailure(Left predicate of (Must have 4 digits && isValidValidInt("444")) failed: Predicate failed: Must have 4 digits., List(DownField(expiration), DownField(card))))
-  """
+              |}""".stripMargin, //Left(DecodingFailure(Left predicate of (Must have 4 digits && isValidValidInt("444")) failed: Predicate failed: Must have 4 digits., List(DownField(expiration), DownField(card))))
+    """
       |{
       |    "card" : {
       |        "cvv" : 333,
@@ -150,15 +164,31 @@ object XCheckValueDeEncode extends App {
 
   payJs.foreach(js => println(decode[Payment](js)))
 
-
 }
 
-
-
 object StartEx extends IOApp {
-  override def run(args: List[String]): IO[ExitCode] = GenSum.run(List("a", "b")) { (to:TestOutcome) =>
-    IO(println(to))
-  }.as[ExitCode](ExitCode.Success)
+  import shop.domain.XCheckValueDeEncode._
+
+
+  override def run(args: List[String]): IO[ExitCode] =
+    //printer(genA)
+   // printer(cardGen)
+    printer(neWordListGen)
+      .run(args) { (to: TestOutcome) =>
+        IO(println(to))
+      }
+      .as[ExitCode](ExitCode.Success)
+
+  implicit def toShow[T]: Show[T] = Show.fromToString
+
+  def printer[T](gen: Gen[T])(implicit s : Show[T]) = new SimpleIOSuite with Checkers {
+    test("Show ...") {
+      forall(gen) { t =>
+        println(t)
+        expect.same(t, t)
+      }
+    }
+  }
 }
 
 /*

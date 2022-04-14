@@ -54,18 +54,18 @@ object BrandRoutesSuiteX extends HttpSuite{
         Gen.buildableOfN[List[Brand], Brand](n, brandGen)
       }
 
-  def dataBrands1 = new TestBrandsX {
+  def dataBrands1 : TestBrandsX = new TestBrandsX {
     override def findAll: IO[List[Brand]] =
       //IO.pure(bg.pureApply(params, Seed.random(),5))
       IO.pure(nonEmptyBList.pureApply(params, Seed.random(),2))
   }
 
-  def dataBrands(brands: List[Brand]) = new TestBrandsX {
+  def dataBrands(brands: List[Brand]) : TestBrandsX = new TestBrandsX {
     override def findAll: IO[List[Brand]] =
       IO.pure(brands)
   }
 
-  def failingBrands(brands: List[Brand]) = new TestBrandsX {
+  def failingBrands(brands: List[Brand]) : TestBrandsX = new TestBrandsX {
     override def findAll: IO[List[Brand]] =
       IO.raiseError(DummyError) *> IO.pure(brands)
   }
@@ -144,7 +144,7 @@ object MainX extends IOApp.Simple {
 
     }
 
-
+//2022XX
    def runFst: IO[Unit] =
     ConfigX.dcfg.flatMap { cfg =>
       Logger[IO].info(s"Loaded config $cfg") >>

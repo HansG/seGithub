@@ -22,7 +22,7 @@ import shop.domain.brand.Brand
 //Überprüfung von Werten zur Compiletime - und Runtime
 object XCheckValueCompileAndRun extends App {
 
-  type Rgx   = "[a-zA-Z]*";
+  type Rgx   = "[a-zA-Z]*"
   type WordPred = String Refined MatchesRegex[Rgx]
   //oder  spezielle Syntax: W...T
   type WordPred1 = String Refined MatchesRegex[W.`"[a-zA-Z]*"`.T]
@@ -48,12 +48,6 @@ object XCheckValueCompileAndRun extends App {
   def w2 : WordPred = Refined.unsafeApply(param) //Parameter Konvertierung möglich
   //damit Testdaten valide: -> Standard-Gen: vgl. modules/tests/src/main/scala/shop/generators.scala    z.B.
   //(Size[4] And ValidInt)  -> generators.sized(size: Int): Gen[Int]
-  import org.scalacheck.Gen
-    //vgl. shop.generators.nonEmptyStringGen.map(toWord)
-  val wordGen: Gen[WordPred] =  Gen.stringOf(Gen.oneOf(('a' to 'z') ++ ('A' to 'Z'))).map(Refined.unsafeApply)
-  val neWordListGen: Gen[List[WordPred]] = Gen
-    .chooseNum(1, 10)
-    .flatMap { n => Gen.buildableOfN[List[WordPred], WordPred](n, wordGen) }
 
 
   //für Laufzeit Either-Konstruktor  ohne explizites "object Word", direkt als Methode mit expliziten Typ T und P
@@ -89,6 +83,7 @@ strings: EndsWith[s], MatchesRegex[s], Contains[s], Url, ValidFloat
 //Anwendungsbeispiele:
   type Username = String Refined Contains['g']
   //Compiletime
+  identity[Username]("aeingstein")
   def lookupu(username: Username): Option[Username] = None
   lookupu("aeingstein")
  // lookupu("aeinstein") -> COmpilefehler

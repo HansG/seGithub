@@ -1,4 +1,4 @@
-package shop.http.routes.secured
+package shop.http.routes.admin
 
 import shop.domain.brand._
 import shop.domain.item._
@@ -25,12 +25,14 @@ object AdminRoutesSuite extends HttpSuite {
     AuthMiddleware(Kleisli.pure(authUser))
 
   test("POST create brand") {
+    //2022XX
     val gen = for {
       i <- brandIdGen
       u <- adminUserGen
       b <- brandParamGen
     } yield (i, u, b)
 
+    //2022XX
     forall(gen) {
       case (id, user, brand) =>
         val req      = POST(brand, uri"/brands")
