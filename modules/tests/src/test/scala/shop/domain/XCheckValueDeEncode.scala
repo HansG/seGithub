@@ -29,47 +29,28 @@ import $ivy.`com.google.guava:guava:18.0`, com.google.common.collect._
 
  */
 
-object XCheckValueDeEncode {
+object XCheckValueDeEncode   {
 
   val cn: CardNamePred = CardNamePred("Nawe")
   //  val cn1 = CardNameP(" nnn") Predicate failed
 
-  //Laufzeit Parser/Konstruktor:
   //sequentielles Produkt-Parsen: Ergebnis Produkttyp oder erster Fehler (fail fast):
-  def toCardOrFirstFail(name: String, number: Long, expiration: String, cvv: Int) =
-    for {
-      name       <- CardNamePred.from(name)
-      number     <- CardNumberPred.from(number)
-      expiration <- CardExpirationPred.from(expiration)
-      cvv        <- CardCVVPred.from(cvv)
-    } yield Card(CardName(name), CardNumber(number), CardExpiration(expiration), CardCVV(cvv))
-
-  // toCardOrFirstFail("John", 1234567890123456L, "4444", 333)
+  lazy val card0 = CardFF("John", 1234567890123456L, "4444", 333)
 
   //paralleles Produkt-Parsen: Ergebnis Produkttyp oder Produkt/Liste der Fehler:
-  def toCardOrFails(name: String, number: Long, expiration: String, cvv: Int) =
-    Parallel.parMap4(
-      CardNamePred.from(name).map(CardName(_)),
-      CardNumberPred.from(number).map(CardNumber(_)),
-      CardExpirationPred.from(expiration).map(CardExpiration(_)),
-      CardCVVPred.from(cvv).map(CardCVV(_))
-      //  )(Card)
-    )(Card(_, _, _, _))
+  lazy val card1: Either[String, Card] = CardFP("John", 1234567890123456L, "4444", 333)
+  // println("Card: " + card1) //Card: Right(Card(John,1234567890123456,4444,333))
 
-  lazy val card1: Either[String, Card] = toCardOrFails("John", 1234567890123456L, "4444", 333)
- // println("Card: " + card1) //Card: Right(Card(John,1234567890123456,4444,333))
-
-  lazy val card2: Either[String, Card] = toCardOrFails(" John", 12345678901234567L, "44445", 333)
+  lazy val card2: Either[String, Card] = CardFP(" John", 12345678901234567L, "44445", 333)
   //Card: Left(Predicate failed: " John".matches("^[a-zA-Z]+(([',. -][a-zA-Z ])?[a-zA-Z]*)*$").
   // Predicate failed: Must have 16 digits.
   // Left predicate of (Must have 4 digits && isValidValidInt("44445")) failed: Predicate failed: Must have 4 digits.)
- // println("Card: " + card2)
+  // println("Card: " + card2)
 
   lazy val pay1 = Payment(UserId(UUID.randomUUID()), USD(5.10), card2.getOrElse(card1.getOrElse(???))) //
   // Payment: Payment(daf6b0f0-7400-476d-83de-2178603c39c5,5.1 USD,Card(John,1234567890123456,4444,333))
 
- // println("Payment: " + pay1)
-
+  // println("Payment: " + pay1)
 
   import org.scalacheck.Gen
   //vgl. shop.generators.nonEmptyStringGen.map(toWord)
@@ -88,14 +69,13 @@ object XCheckValueDeEncode {
 
   lazy val cardGen: Gen[Card] =
     for {
-      n <- stringGent.map(x => CardName(Refined.unsafeApply(x)))
-      u <- sizedNum(16).map(x => CardNumber(Refined.unsafeApply(x.toLong)))
-      e <- sizedNum(4).map(x => CardExpiration(Refined.unsafeApply(x)))
-      c <- sizedNum(3).map(x => CardCVV(Refined.unsafeApply(x.toInt)))
-    } yield Card(n, u, e, c)
+      n <- stringGent
+      u <- sizedNum(16)
+      e <- sizedNum(4)
+      c <- sizedNum(3)
+    } yield CardFU(n, u, e, c)
 
  // println("Card: " + cardGen.sample)
- // StartEx.run(null)
 
   lazy val neCardListGen0: Gen[List[Card]] = Gen.listOf(cardGen)
 
@@ -127,9 +107,9 @@ object XCheckValueDeEncode {
   //Encode -> kompaktes  Json:
   lazy val asJ = pay1.asJson.noSpaces
   //{"id":"2399b828-6dd5-448a-8ac9-11d20efd3f6d","total":5.1,"card":{"name":"John","number":1234567890123456,"expiration":"4444","cvv":333}}
- // println(asJ)
+  // println(asJ)
   //Encode ->  formatiertes Json:
- lazy  val asJ1 = pay1.asJson.spaces4SortKeys
+  lazy val asJ1 = pay1.asJson.spaces4SortKeys
   //println(asJ1)
 
   //Decode zu Either[Error, A] -> fail fast mit (erstem Fehler + "downstream Felder")
@@ -183,28 +163,23 @@ object XCheckValueDeEncode {
 
 }
 
-object StartEx extends IOApp {
-  import shop.domain.XCheckValueDeEncode._
+object TestApp extends IOApp {
+  import XCheckValueDeEncode._
+  def run(args: List[String]):IO[cats.effect.ExitCode] =
+    PrinterTest(neCardListGen).run
+}
 
-  override def run(args: List[String] = List()): IO[ExitCode] =
-    //printer(genA)
-    // printer(cardGen)
-    printer(neCardListGen)
-      .run(args) { (to: TestOutcome) =>
-        IO(println(to))
-      }
-      .as[ExitCode](ExitCode.Success)
+case class PrinterTest[T](gen: Gen[T]) extends SimpleIOSuite with Checkers {
+  implicit def toShow: Show[T] = Show.fromToString
 
-  implicit def toShow[T]: Show[T] = Show.fromToString
-
-  def printer[T](gen: Gen[T])(implicit s: Show[T]) = new SimpleIOSuite with Checkers {
-    test("Show ...") {
-      forall(gen) { t =>
-        println(t)
-        expect.same(t, t)
-      }
+  test("Show ...") {
+    forall(gen) { t =>
+      println(t)
+      expect.same(t, t)
     }
   }
+
+  def run:IO[cats.effect.ExitCode]  = run(List())((to: TestOutcome) => IO(println(to))).as[ExitCode](ExitCode.Success)
 }
 
 /*

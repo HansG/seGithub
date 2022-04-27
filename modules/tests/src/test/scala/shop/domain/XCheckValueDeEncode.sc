@@ -1,6 +1,6 @@
 import cats.Show
 import shop.domain.XCheckValueDeEncode._
-import shop.domain.StartEx
+import shop.domain.PrinterTest
 import shop.domain.checkout.Card
  import  pprint.PPrinter
 
