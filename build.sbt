@@ -9,6 +9,9 @@ ThisBuild / evictionErrorLevel := Level.Warn
 ThisBuild / scalafixDependencies += Libraries.organizeImports
 
 resolvers += Resolver.sonatypeRepo("snapshots")
+resolvers += Resolver.mavenCentral
+resolvers += "mvnrepository" at "https://mvnrepository.com/artifact"
+
 
 val scalafixCommonSettings = inConfig(IntegrationTest)(scalafixConfigSettings(IntegrationTest))
 lazy val root = (project in file("."))
@@ -89,8 +92,9 @@ lazy val core = (project in file("modules/core"))
       Libraries.refinedCats,
       Libraries.skunkCore,
       Libraries.skunkCirce,
-      Libraries.squants
-    )
+      Libraries.squants,
+      "com.lihaoyi" %% "ammonite" % "2.5.3"  cross CrossVersion.full
+     )
   )
 
 addCommandAlias("runLinter", ";scalafixAll --rules OrganizeImports")
