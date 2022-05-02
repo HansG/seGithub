@@ -4,13 +4,14 @@ import cats.Parallel
 import cats.conversions.all.autoConvertProfunctorVariance
 import shop.ext.refined._
 import derevo.cats._
-import derevo.circe.magnolia.{ decoder, encoder }
+import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.api._
 import eu.timepit.refined.boolean.And
 import eu.timepit.refined.collection.Size
-import eu.timepit.refined.string.{ MatchesRegex, ValidInt }
-import io.circe.{ Decoder, Encoder, Json }
+import eu.timepit.refined.predicates.all._
+import eu.timepit.refined.string.{MatchesRegex, ValidInt}
+import io.circe.{Decoder, Encoder, Json}
 import io.estatico.newtype.macros.newtype
 //import io.circe.refined._
 //import eu.timepit.refined.cats._
@@ -22,6 +23,8 @@ import io.estatico.newtype.macros.newtype
 //import java.util.UUID
 
 object checkout {
+ 
+
   //  type Rgx = "[a-zA-Z]*)*$"
   type Rgx = "^[a-zA-Z]+(([',. -][a-zA-Z ])?[a-zA-Z]*)*$"
 
@@ -43,6 +46,10 @@ object checkout {
       encoderOf[String, MatchesRegex[Rgx]].contramap(_.value)
 
   }*/
+
+
+
+
 
   @derive(decoder, encoder, show)
   @newtype

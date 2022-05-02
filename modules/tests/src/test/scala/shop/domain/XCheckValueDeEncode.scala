@@ -5,7 +5,7 @@ import cats.{ Parallel, Show }
 import eu.timepit.refined.api.Refined
 import org.scalacheck.Gen
 import org.scalacheck.rng.Seed
-import shop.domain.XCheckValueCompileAndRun.WordPred
+import shop.domain.XCheckValueCompileAndRun.WordT
 import shop.domain.auth.UserId
 import shop.domain.checkout._
 import shop.domain.payment.Payment
@@ -31,7 +31,6 @@ import $ivy.`com.google.guava:guava:18.0`, com.google.common.collect._
 
 object XCheckValueDeEncode   {
 
-  val cn: CardNamePred = CardNamePred("Nawe")
   //  val cn1 = CardNameP(" nnn") Predicate failed
 
   //sequentielles Produkt-Parsen: Ergebnis Produkttyp oder erster Fehler (fail fast):
