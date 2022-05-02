@@ -2,6 +2,9 @@ package shop.domain
 
 import cats.Parallel
 import cats.conversions.all.autoConvertProfunctorVariance
+import cats.data.Validated._
+import cats.data.{EitherNel, ValidatedNel}
+import cats.implicits._
 import shop.ext.refined._
 import derevo.cats._
 import derevo.circe.magnolia.{decoder, encoder}
@@ -11,6 +14,7 @@ import eu.timepit.refined.boolean.And
 import eu.timepit.refined.collection.Size
 import eu.timepit.refined.predicates.all._
 import eu.timepit.refined.string.{MatchesRegex, ValidInt}
+import eu.timepit.refined.types.string.NonEmptyString
 import io.circe.{Decoder, Encoder, Json}
 import io.estatico.newtype.macros.newtype
 //import io.circe.refined._
@@ -104,7 +108,7 @@ implicit val jsonDecoder: Decoder[CardExpiration] =
   }
 
   //paralleles Produkt-Parsen: Ergebnis Produkttyp oder Produkt/Liste der Fehler:
-  object CardFP {
+  object CardFS {
     def apply(name: String, number: Long, expiration: String, cvv: Int) =
       Parallel.parMap4(
         CardNamePred.from(name).map(CardName(_)),
@@ -114,6 +118,29 @@ implicit val jsonDecoder: Decoder[CardExpiration] =
         //  )(Card)
       )(Card(_, _, _, _))
   }
+
+  object CardFL {
+    def apply(name: String, number: Long, expiration: String, cvv: Int) =
+     (
+        CardNamePred.from(name).toEitherNel,
+        CardNumberPred.from(number).toEitherNel ,
+        CardExpirationPred.from(expiration).toEitherNel,
+        CardCVVPred.from(cvv).toEitherNel
+        //  )(Card)
+      ).parMapN((cna, cnu, ce, cv) => Card(CardName(cna),CardNumber(cnu), CardExpiration(ce), CardCVV(cv)))
+
+  }
+
+  object CardVL {
+    def apply(name: String, number: Long, expiration: String, cvv: Int) =
+     (
+        CardNamePred.from(name).toValidatedNel,
+        CardNumberPred.from(number).toValidatedNel ,
+        CardExpirationPred.from(expiration).toValidatedNel,
+        CardCVVPred.from(cvv).toValidatedNel
+      ).parMapN((cna, cnu, ce, cv) => Card(CardName(cna),CardNumber(cnu), CardExpiration(ce), CardCVV(cv)))
+  }
+
 
   object CardFU {
     def apply(name: String, number: String, expiration: String, cvv: String) =

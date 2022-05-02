@@ -37,10 +37,10 @@ object XCheckValueDeEncode   {
   lazy val card0 = CardFF("John", 1234567890123456L, "4444", 333)
 
   //paralleles Produkt-Parsen: Ergebnis Produkttyp oder Produkt/Liste der Fehler:
-  lazy val card1: Either[String, Card] = CardFP("John", 1234567890123456L, "4444", 333)
+  lazy val card1: Either[String, Card] = CardFS("John", 1234567890123456L, "4444", 333)
   // println("Card: " + card1) //Card: Right(Card(John,1234567890123456,4444,333))
 
-  lazy val card2: Either[String, Card] = CardFP(" John", 12345678901234567L, "44445", 333)
+  lazy val card2: Either[String, Card] = CardFS(" John", 12345678901234567L, "44445", 333)
   //Card: Left(Predicate failed: " John".matches("^[a-zA-Z]+(([',. -][a-zA-Z ])?[a-zA-Z]*)*$").
   // Predicate failed: Must have 16 digits.
   // Left predicate of (Must have 4 digits && isValidValidInt("44445")) failed: Predicate failed: Must have 4 digits.)
