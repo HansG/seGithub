@@ -3,16 +3,22 @@ package shop.domain
 import cats.data.Validated._
 import cats.data.{EitherNel, ValidatedNel}
 import cats.implicits._
-import eu.timepit.refined.{refineMV, refineV}
+import eu.timepit.refined._
 import eu.timepit.refined.api.RefType.refinedRefType
 import eu.timepit.refined.api._
 import eu.timepit.refined.auto._
+import eu.timepit.refined.api.Refined
+import eu.timepit.refined.boolean.AnyOf
+import eu.timepit.refined.numeric._
+import eu.timepit.refined.string._
+import eu.timepit.refined.char._
+import eu.timepit.refined.collection._
+import eu.timepit.refined.boolean._
 import eu.timepit.refined.generic._
 import eu.timepit.refined.cats.syntax.CatsRefinedTypeOps
 import eu.timepit.refined.predicates.all.{And, Contains, Forall, Greater, GreaterEqual, Interval, LessEqual, LetterOrDigit, MatchesRegex, MaxSize, NonEmpty, Not, Positive, Size, Url, ValidFloat, ValidInt}
 import io.estatico.newtype.macros.newtype
 import shapeless._
-import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonEmptyString, NonNegInt}
 import shop.domain.brand.Brand
 
@@ -20,32 +26,64 @@ import shop.domain.brand.Brand
 object XCheckValueCompileAndRun extends App {
 
   //https://tech.ovoenergy.com/safe-expressive-code-with-refinement-types/?msclkid=bde8b5c4a5e511ec9a9bdf04c8d62d95
-  type NameT  = String Refined (NonEmpty And MaxSize[20] And Forall[LetterOrDigit])
-  type AlterT = Int Refined GreaterEqual[0] And LessEqual[60]
+  //Validierung zur Compiletime nur  mit (String-)Literal:
 
   val y: String Refined Url = "http://example.com"
+
+  val y1 = refineMV[Url]("http://example.com")
+
+  val d1: Char Refined Equal['3'] = '3'
+  val d2: Char Refined Digit = d1
+ // val d3: Char Refined Letter = d1
+
+  val a: Int Refined Greater[5] = 10
+  val b: Int Refined Greater[4] = a
+ // val c: Int Refined Greater[6] = a
+
+  type ZeroToOne = Not[Less[0.0]] And Not[Greater[1.0]]
+//  val z1 = refineMV[ZeroToOne](1.8)
+
+  refineMV[AnyOf[Digit :: Letter :: Whitespace :: HNil]]('F')
+ // refineMV[MatchesRegex["[0-9]+"]]("123.")
+
+
+  type NameT  = String Refined (NonEmpty And MaxSize[20] And Forall[LetterOrDigit])
+  type AlterT = Int Refined (GreaterEqual[10] And LessEqual[60])
+  type Alter1T =  Int Refined Interval.ClosedOpen[7, 77]
 
   case class Person(name: NameT, alter: AlterT, url: String Refined Url)
   val per1 = Person("Peter", 58, "http://example.com")
 
-  type Rgx   = "[a-zA-Z]*"
-  type WordT = String Refined MatchesRegex[Rgx]
 
-  //Validierung zur Compiletime nur  mit String-Literal:
+  type WordT = String Refined MatchesRegex["[a-zA-Z]*"]
+
   val w1 = "aeinstein": WordT //Konstruktor , hier kein Either nötig
 
-  //dasselbe ohne explizites Object Word
-  //direkt mit Std-Methode identity: konvertiert String -> Word:
-  val w3          = identity[WordT]("aeinstein")
-  def id[A](a: A) = a
-  //damit z.B.
   case class Sentence(wds: WordT*)
   Sentence("John", "adi")
-  Sentence("J ohn", "adi")
-  Sentence(id[WordT]("John"), id[WordT]("adi"))
+  // Sentence("J  ohn", "adi")   CF
+
+
+  type MasszahlT = Double Refined Interval.Closed[0.0, 500.0]
+
+  @newtype
+  case class Celsius(num: MasszahlT)
+  @newtype
+  case class Fahrenheit(num: MasszahlT)
+
+  val c = Celsius(4.8)
+
+  case class Temperaturen(innen: Celsius, aussen: Fahrenheit)
+  val laenge = Temperaturen(Celsius(4.8), Fahrenheit(19.7))
+
+
+
+
 
 //für Laufzeit Either-Konstruktor
 // Companion-Objekt mit Konstruktoren
+  val w0     = refineV[WordT]("aeinstein")
+
   object WordT extends RefinedTypeOps[WordT, String] //MatchesRegex[Rgx]
   val param = "aeinstein"
   val w     = WordT.from(param): Either[String, WordT]
@@ -54,6 +92,9 @@ object XCheckValueCompileAndRun extends App {
   def w2: WordT = Refined.unsafeApply(param) //Parameter Konvertierung möglich
   //damit Testdaten valide: -> Standard-Gen: vgl. modules/tests/src/main/scala/shop/generators.scala    z.B.
   //(Size[4] And ValidInt)  -> generators.sized(size: Int): Gen[Int]
+
+
+
 
   //für Laufzeit Either-Konstruktor  ohne explizites "object Word", direkt als Methode mit expliziten Typ T und P
   def toRefined[T, P](t: T)(implicit valV: Validate[T, P]): Either[String, T Refined P] = refineV[P].apply[T](t)(valV)
@@ -70,12 +111,6 @@ object XCheckValueCompileAndRun extends App {
   def TR[T, P](t: T)(implicit rt: RefinedType.AuxT[T Refined P, T]) = ToRefined1[T, P].from(t)
   val p5                                                            = TR[String, MatchesRegex[Rgx]]("1aeinstein")
 
-  @newtype
-  case class cm(num: ValidFloat)
-  @newtype
-  case class inch(num: ValidFloat)
-  case class Laenge(oben: cm, unten: inch)
-  val laenge = Laenge(cm(4.8), inch(19.7))
 
   /* Beispiele für Standard Predicates:
   boolean: Not[P], Or[P1, P2], And[P1, P2], AllOf[Ps], AnyOf[Ps]
@@ -97,7 +132,7 @@ strings: EndsWith[s], MatchesRegex[s], Contains[s], Url, ValidFloat
   type SizedInt  = String Refined (Size[4] And ValidInt)
   type Username0 = String Refined (Contains['g'] And Size[4])
 
-  type OneToTen = Int Refined Interval.Closed[W.`1`.T, W.`10`.T]
+  type OneToTen = Int Refined Interval.Closed[1, 10]
   //Compiletime
   def see(n: OneToTen): Option[OneToTen] = None
   see(10)
