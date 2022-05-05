@@ -2,7 +2,11 @@ package shop.domain
 
 import cats.data.Validated._
 import cats.data.{EitherNel, ValidatedNel}
+import cats.instances.either._
+import cats._
 import cats.implicits._
+import cats.syntax._
+import cats.conversions.all._
 import eu.timepit.refined._
 import eu.timepit.refined.api.RefType._
 import eu.timepit.refined.api._
@@ -20,6 +24,14 @@ import io.estatico.newtype.macros.newtype
 import shapeless._
 import shop.domain.brand.Brand
 
+// import eu.timepit.refined.boolean.And
+//import eu.timepit.refined.collection.Size
+//import eu.timepit.refined.predicates.all._
+//import eu.timepit.refined.string.{MatchesRegex, ValidInt}
+
+
+
+
 //Überprüfung von Werten zur Compiletime - und Runtime
 object XCheckValueCompileAndRun extends App {
 
@@ -31,14 +43,14 @@ object XCheckValueCompileAndRun extends App {
   val ne = refineMV[NonEmpty]("nm")
   val ne1 = refineMV[NonEmpty](" ")
 
-  type CongT = String Refined Contains['g']
+  type CongT = String Refined MaxSize[20]
   type CongsT = String Refined (Contains['g'] And Size[4])
-  val cg : CongT = "jkg zz"
+  val cg : CongT = refineMV[MaxSize[20]]("jkg zz")
 
-  val cg1 = refineMV[Contains['g']](" hgz")
+  val cg1 : CongT =  " hgz"
 
-  type SizedIntT  = String Refined (Size[4] And ValidInt)
-  val si : SizedIntT = "4444"
+  type SizedIntT  = String Refined (MaxSize[4] And Forall[Digit])
+  val si : SizedIntT = refineMV[MaxSize[4] And Forall[Digit]]("4444")
 
   val y: String Refined Url = "http://example.com"
 
@@ -160,6 +172,10 @@ strings: EndsWith[s], MatchesRegex[s], Contains[s], Url, ValidFloat
   //horizontale Kombi
   //sequentiell vs parallel siehe XCheckValueDeEncode
   // Parallele validated Conversion
+
+
+
+
   case class HProd(a: NonEmptyString, b: GTFive)
   def toHProd(a: String, b: Int): EitherNel[String, HProd] =
     (NonEmptyString.from(a).toEitherNel, GTFive.from(b).toEitherNel)
@@ -171,14 +187,14 @@ strings: EndsWith[s], MatchesRegex[s], Contains[s], Url, ValidFloat
   println(toHProdV("", 2))
 
   //Compiletime Check von M <: Int  vgl. "Refined" mit Scala3
-  case class Residue[M <: Int](n: Int) extends AnyVal {
-    def +(rhs: Residue[M])(implicit m: ValueOf[M]): Residue[M] =
-      Residue((this.n + rhs.n) % valueOf[M])
+  case class Mod[M <: Int](n: Int) extends AnyVal {
+    def +(rhs: Mod[M])(implicit m: ValueOf[M]): Mod[M] =
+      Mod((this.n + rhs.n) % valueOf[M])
   }
-  val fiveModTen = Residue[10](5)
-  val nineModTen = Residue[10](9)
+  val fiveModTen = Mod[10](5)
+  val nineModTen = Mod[10](9)
   fiveModTen + nineModTen // OK == Residue[10](4)
-  val fourModEleven = Residue[10](4)
+  val fourModEleven = Mod[10](4)
   fiveModTen + fourModEleven // compiler error:
 
   //mit cast zu Option[T]

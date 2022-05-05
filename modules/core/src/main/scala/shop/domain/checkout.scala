@@ -5,6 +5,7 @@ import cats.conversions.all._
 import cats.data._
 import cats.data.Validated._
 import cats.implicits._
+import cats.NonEmptyParallel._
 import shop.ext.refined._
 import derevo.cats._
 import derevo.circe.magnolia.{decoder, encoder}
@@ -141,8 +142,17 @@ implicit val jsonDecoder: Decoder[CardExpiration] =
       ).parMapN((cna, cnu, ce, cv) => Card(CardName(cna),CardNumber(cnu), CardExpiration(ce), CardCVV(cv)))
   }
 
-  implicit object NEPV extends cats.NonEmptyParallel[Validated[java.lang.String, _]] {
+  type ValidatedS[A] = ValidatedNel[java.lang.String, A]
+  implicit object NEPV extends cats.NonEmptyParallel[ValidatedS] {
+    override type F[A] = List[A]
 
+    override def apply: Apply[F] = ???
+
+    override def flatMap: FlatMap[ValidatedS] = ???
+
+    override def sequential: ~>[F, ValidatedS] = ???
+
+    override def parallel: ~>[ValidatedS, F] = ???
   }
 
 
