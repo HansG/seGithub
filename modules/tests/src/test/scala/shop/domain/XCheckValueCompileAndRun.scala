@@ -33,9 +33,12 @@ object XCheckValueCompileAndRun extends App {
 
   type CongT = String Refined Contains['g']
   type CongsT = String Refined (Contains['g'] And Size[4])
-  val cg = refineMV[Contains['g']](" hgz")
+  val cg : CongT = "jkg zz"
+
+  val cg1 = refineMV[Contains['g']](" hgz")
 
   type SizedIntT  = String Refined (Size[4] And ValidInt)
+  val si : SizedIntT = "4444"
 
   val y: String Refined Url = "http://example.com"
 
@@ -43,6 +46,25 @@ object XCheckValueCompileAndRun extends App {
 
   refineMV[AnyOf[Digit :: Letter :: Whitespace :: HNil]]('F')
   // refineMV[MatchesRegex["[0-9]+"]]("123.")
+
+  type NameT  = String Refined (NonEmpty And MaxSize[20] And Forall[LetterOrDigit])
+  type AlterT = Int Refined (GreaterEqual[7] And LessEqual[77])
+  type Alter1T =  Int Refined Interval.ClosedOpen[7, 77]
+
+  case class Person(name: NameT, alter: AlterT, url: String Refined Url)
+  val per1 = Person("Peter", 58, "http://example.com")
+
+
+  type WordT = String Refined MatchesRegex["[a-zA-Z]*"]
+
+  val w1 = "aeinstein": WordT //Konstruktor , hier kein Either nötig
+
+  val ps = List[WordT]("John", "adi")
+  // val ps1 = List[WordT]("Joh n", "adi")
+  case class Sentence(wds: WordT*)
+  Sentence("John", "adi")
+  // Sentence("J  ohn", "adi")   CF
+
 
   val d1: Char Refined Equal['3'] = '3'
   val d2: Char Refined Digit = d1
@@ -58,23 +80,8 @@ object XCheckValueCompileAndRun extends App {
 
 
 
-  type NameT  = String Refined (NonEmpty And MaxSize[20] And Forall[LetterOrDigit])
-  type AlterT = Int Refined (GreaterEqual[7] And LessEqual[77])
-  type Alter1T =  Int Refined Interval.ClosedOpen[7, 77]
-
-  case class Person(name: NameT, alter: AlterT, url: String Refined Url)
-  val per1 = Person("Peter", 58, "http://example.com")
 
 
-  type WordT = String Refined MatchesRegex["[a-zA-Z]*"]
-
-  val w1 = "aeinstein": WordT //Konstruktor , hier kein Either nötig
-
-  val ps = List[WordT]("John", "adi")
- // val ps1 = List[WordT]("Joh n", "adi")
-  case class Sentence(wds: WordT*)
-  Sentence("John", "adi")
-  // Sentence("J  ohn", "adi")   CF
 
 
   //für Laufzeit Either-Konstruktor

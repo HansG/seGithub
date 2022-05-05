@@ -1,9 +1,9 @@
 package shop.domain
 
-import cats.Parallel
-import cats.conversions.all.autoConvertProfunctorVariance
+import cats._
+import cats.conversions.all._
+import cats.data._
 import cats.data.Validated._
-import cats.data.{EitherNel, ValidatedNel}
 import cats.implicits._
 import shop.ext.refined._
 import derevo.cats._
@@ -139,6 +139,10 @@ implicit val jsonDecoder: Decoder[CardExpiration] =
         CardExpirationPred.from(expiration).toValidatedNel,
         CardCVVPred.from(cvv).toValidatedNel
       ).parMapN((cna, cnu, ce, cv) => Card(CardName(cna),CardNumber(cnu), CardExpiration(ce), CardCVV(cv)))
+  }
+
+  implicit object NEPV extends cats.NonEmptyParallel[Validated[java.lang.String, _]] {
+
   }
 
 
