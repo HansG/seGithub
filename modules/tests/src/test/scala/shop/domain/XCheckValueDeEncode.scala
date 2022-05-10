@@ -1,7 +1,8 @@
 package shop.domain
 
-import cats.effect.{ ExitCode, IO, IOApp }
-import cats.{ Parallel, Show }
+import cats.effect.std.Random
+import cats.effect.{ExitCode, IO, IOApp}
+import cats.{Parallel, Show}
 import eu.timepit.refined.api.Refined
 import org.scalacheck.Gen
 import org.scalacheck.rng.Seed
@@ -11,7 +12,7 @@ import shop.domain.checkout._
 import shop.domain.payment.Payment
 import squants.market.USD
 import weaver.scalacheck.Checkers
-import weaver.{ SimpleIOSuite, TestOutcome }
+import weaver.{SimpleIOSuite, TestOutcome}
 
 import java.util.UUID
 //import eu.timepit.refined.api._
@@ -75,6 +76,7 @@ object XCheckValueDeEncode   {
     } yield CardFU(n, u, e, c)
 
  // println("Card: " + cardGen.sample)
+  //println( neCardListGen.pureApply(Gen.Parameters.default.withSize(10) ,Seed.random(),2))
 
   lazy val neCardListGen0: Gen[List[Card]] = Gen.listOf(cardGen)
 
@@ -84,6 +86,7 @@ object XCheckValueDeEncode   {
       Gen.buildableOfN[List[Card], Card](n, cardGen)
     }
   //  Gen.buildableOfN[List[WordPred], WordPred](n, stringGent.map(Refined.unsafeApply(_)))
+
 
   //todo -> 2022XX   arbitrary ... Testserver mit Mockdaten hinschicken/abholen
   //für datenbank (de)serialisieren  client/json (de)serialisieren   eigenes Protokoll mit ODER/UND (de)serialisieren

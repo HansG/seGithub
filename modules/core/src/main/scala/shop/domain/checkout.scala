@@ -1,11 +1,13 @@
 package shop.domain
 
 import cats._
-import cats.conversions.all._
-import cats.data._
-import cats.data.Validated._
 import cats.implicits._
-import cats.NonEmptyParallel._
+import cats.instances._
+import NonEmptyParallel._
+import cats.instances.EitherInstances
+import cats.conversions.all._
+import cats.data.implicits
+import cats.data.Validated._
 import shop.ext.refined._
 import derevo.cats._
 import derevo.circe.magnolia.{decoder, encoder}
@@ -129,8 +131,18 @@ implicit val jsonDecoder: Decoder[CardExpiration] =
         CardCVVPred.from(cvv).toEitherNel
         //  )(Card)
       ).parMapN((cna, cnu, ce, cv) => Card(CardName(cna),CardNumber(cnu), CardExpiration(ce), CardCVV(cv)))
-
   }
+ /*
+  type ValidatedS[A] = Validated[java.lang.String, A]
+  implicit object NEPV extends cats.NonEmptyParallel[ValidatedS] {
+    override type F[_] = String
+    override def apply: Apply[F] = ???
+    override def flatMap: FlatMap[ValidatedS] = ???
+    override def sequential: ~>[F, ValidatedS] = ???
+    override def parallel: ~>[ValidatedS, F] = ???
+  }
+*/
+
 
   object CardVL {
     def apply(name: String, number: Long, expiration: String, cvv: Int) =
@@ -141,21 +153,16 @@ implicit val jsonDecoder: Decoder[CardExpiration] =
         CardCVVPred.from(cvv).toValidatedNel
       ).parMapN((cna, cnu, ce, cv) => Card(CardName(cna),CardNumber(cnu), CardExpiration(ce), CardCVV(cv)))
   }
-
-  type ValidatedS[A] = ValidatedNel[java.lang.String, A]
-  implicit object NEPV extends cats.NonEmptyParallel[ValidatedS] {
+/*
+  type ValidatedNS[A] = ValidatedNel[java.lang.String, A]
+  implicit object NEPVN extends cats.NonEmptyParallel[ValidatedNS] {
     override type F[A] = List[A]
-
     override def apply: Apply[F] = ???
-
-    override def flatMap: FlatMap[ValidatedS] = ???
-
-    override def sequential: ~>[F, ValidatedS] = ???
-
-    override def parallel: ~>[ValidatedS, F] = ???
+    override def flatMap: FlatMap[ValidatedNS] = ???
+    override def sequential: ~>[F, ValidatedNS] = ???
+    override def parallel: ~>[ValidatedNS, F] = ???
   }
-
-
+*/
   object CardFU {
     def apply(name: String, number: String, expiration: String, cvv: String) =
       Card(
