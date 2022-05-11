@@ -6,7 +6,7 @@ import cats.{Parallel, Show}
 import eu.timepit.refined.api.Refined
 import org.scalacheck.Gen
 import org.scalacheck.rng.Seed
-import shop.domain.XCheckValueCompileAndRun.WordT
+import shop.domain.XCheckValueCompileAndRun._
 import shop.domain.auth.UserId
 import shop.domain.checkout._
 import shop.domain.payment.Payment

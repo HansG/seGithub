@@ -1,25 +1,42 @@
 package shop.domain
 
 import cats._
-import cats.implicits._
-import cats.instances._
-import NonEmptyParallel._
-import cats.instances.EitherInstances
-import cats.conversions.all._
-import cats.data._
-import cats.data.Validated._
+//import cats.implicits._
+//import cats.instances._
+//import NonEmptyParallel._
+//import cats.instances.EitherInstances
+//import cats.conversions.all._
+//import cats.data._
+//import cats.data.Validated._
 //import shop.ext.refined._
 import derevo.cats._
-import derevo.circe.magnolia.{decoder, encoder}
+import derevo.circe.magnolia.{ decoder, encoder }
 import derevo.derive
+import eu.timepit.refined._
 import eu.timepit.refined.api._
 import eu.timepit.refined.boolean.And
 import eu.timepit.refined.collection.Size
 import eu.timepit.refined.predicates.all._
-import eu.timepit.refined.string.{MatchesRegex, ValidInt}
-import eu.timepit.refined.types.string.NonEmptyString
-import io.circe.{Decoder, Encoder, Json}
+//import cats.effect.IO
+import eu.timepit.refined.api.Refined
+//import eu.timepit.refined.numeric.Interval
+//import eu.timepit.refined.collection.NonEmpty
+//import eu.timepit.refined.types.string.NonEmptyString
+import io.circe._
+import io.circe.generic.auto._
+import io.circe.generic.codec._
+import io.circe.generic.decoding._
+import io.circe.generic.encoding._
+import io.circe.syntax._
+import io.circe.refined._
+import org.http4s.circe._
+import org.http4s.dsl.io._
+import org.http4s.implicits._
+import org.http4s.HttpRoutes
+import io.circe.{ Decoder, Encoder, Json }
 import io.estatico.newtype.macros.newtype
+//import eu.timepit.refined.string._
+import eu.timepit.refined.types.string._
 //import io.circe.refined._
 //import eu.timepit.refined.cats._
 //import shop.domain.auth.UserId
@@ -30,15 +47,15 @@ import io.estatico.newtype.macros.newtype
 //import java.util.UUID
 
 object checkout {
- 
 
-  //  type Rgx = "[a-zA-Z]*)*$"
-  type Rgx = "^[a-zA-Z]+(([',. -][a-zA-Z ])?[a-zA-Z]*)*$"
+    type Rgx = "[a-zA-Z]*"
+  //type Rgx = """^[a-zA-Z]+(([',. -][a-zA-Z ])?[a-zA-Z]*)*$"""
 
-  type CardNamePred       = String Refined MatchesRegex["^[a-zA-Z]+(([',. -][a-zA-Z ])?[a-zA-Z]*)*$"]
+  type CardNamePred       = String Refined MatchesRegex[Rgx]
   type CardNumberPred     = Long Refined Size[16]
   type CardExpirationPred = String Refined (Size[4] And ValidInt)
   type CardCVVPred        = Int Refined Size[3]
+
 
   @derive(decoder, encoder, show)
   @newtype
@@ -53,11 +70,6 @@ object checkout {
       encoderOf[String, MatchesRegex[Rgx]].contramap(_.value)
 
   }*/
-
-
-
-
-
   @derive(decoder, encoder, show)
   @newtype
   case class CardNumber(value: CardNumberPred)
@@ -78,7 +90,7 @@ implicit val jsonDecoder: Decoder[CardExpiration] =
   decoderOf[String, Size[4] And ValidInt].map(CardExpiration(_))
 }*/
 
-  @derive(encoder, show)
+  @derive(decoder, encoder, show)
   @newtype
   case class CardCVV(value: CardCVVPred)
 
@@ -109,6 +121,5 @@ implicit val jsonDecoder: Decoder[CardExpiration] =
       } yield Card(CardName(name), CardNumber(number), CardExpiration(expiration), CardCVV(cvv))
 
   }
-
 
 }
