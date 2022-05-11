@@ -6,9 +6,9 @@ import cats.instances._
 import NonEmptyParallel._
 import cats.instances.EitherInstances
 import cats.conversions.all._
-import cats.data.implicits
+import cats.data._
 import cats.data.Validated._
-import shop.ext.refined._
+//import shop.ext.refined._
 import derevo.cats._
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
@@ -35,7 +35,7 @@ object checkout {
   //  type Rgx = "[a-zA-Z]*)*$"
   type Rgx = "^[a-zA-Z]+(([',. -][a-zA-Z ])?[a-zA-Z]*)*$"
 
-  type CardNamePred       = String Refined MatchesRegex[Rgx]
+  type CardNamePred       = String Refined MatchesRegex["^[a-zA-Z]+(([',. -][a-zA-Z ])?[a-zA-Z]*)*$"]
   type CardNumberPred     = Long Refined Size[16]
   type CardExpirationPred = String Refined (Size[4] And ValidInt)
   type CardCVVPred        = Int Refined Size[3]
@@ -110,68 +110,5 @@ implicit val jsonDecoder: Decoder[CardExpiration] =
 
   }
 
-  //paralleles Produkt-Parsen: Ergebnis Produkttyp oder Produkt/Liste der Fehler:
-  object CardFS {
-    def apply(name: String, number: Long, expiration: String, cvv: Int) =
-      Parallel.parMap4(
-        CardNamePred.from(name).map(CardName(_)),
-        CardNumberPred.from(number).map(CardNumber(_)),
-        CardExpirationPred.from(expiration).map(CardExpiration(_)),
-        CardCVVPred.from(cvv).map(CardCVV(_))
-        //  )(Card)
-      )(Card(_, _, _, _))
-  }
-
-  object CardFL {
-    def apply(name: String, number: Long, expiration: String, cvv: Int) =
-     (
-        CardNamePred.from(name).toEitherNel,
-        CardNumberPred.from(number).toEitherNel ,
-        CardExpirationPred.from(expiration).toEitherNel,
-        CardCVVPred.from(cvv).toEitherNel
-        //  )(Card)
-      ).parMapN((cna, cnu, ce, cv) => Card(CardName(cna),CardNumber(cnu), CardExpiration(ce), CardCVV(cv)))
-  }
- /*
-  type ValidatedS[A] = Validated[java.lang.String, A]
-  implicit object NEPV extends cats.NonEmptyParallel[ValidatedS] {
-    override type F[_] = String
-    override def apply: Apply[F] = ???
-    override def flatMap: FlatMap[ValidatedS] = ???
-    override def sequential: ~>[F, ValidatedS] = ???
-    override def parallel: ~>[ValidatedS, F] = ???
-  }
-*/
-
-
-  object CardVL {
-    def apply(name: String, number: Long, expiration: String, cvv: Int) =
-     (
-        CardNamePred.from(name).toValidatedNel,
-        CardNumberPred.from(number).toValidatedNel ,
-        CardExpirationPred.from(expiration).toValidatedNel,
-        CardCVVPred.from(cvv).toValidatedNel
-      ).parMapN((cna, cnu, ce, cv) => Card(CardName(cna),CardNumber(cnu), CardExpiration(ce), CardCVV(cv)))
-  }
-/*
-  type ValidatedNS[A] = ValidatedNel[java.lang.String, A]
-  implicit object NEPVN extends cats.NonEmptyParallel[ValidatedNS] {
-    override type F[A] = List[A]
-    override def apply: Apply[F] = ???
-    override def flatMap: FlatMap[ValidatedNS] = ???
-    override def sequential: ~>[F, ValidatedNS] = ???
-    override def parallel: ~>[ValidatedNS, F] = ???
-  }
-*/
-  object CardFU {
-    def apply(name: String, number: String, expiration: String, cvv: String) =
-      Card(
-        CardName(Refined.unsafeApply(name)),
-        CardNumber(Refined.unsafeApply(number.toLong)),
-        CardExpiration(Refined.unsafeApply(expiration)),
-        CardCVV(Refined.unsafeApply(cvv.toInt))
-      )
-
-  }
 
 }

@@ -1,28 +1,26 @@
 package shop.domain
 
+import cats._
 import cats.data.Validated._
 import cats.data.{EitherNel, ValidatedNel}
-import cats.instances.either._
-import cats._
 import cats.implicits._
-import cats.syntax._
-import cats.conversions.all._
+import cats.instances.either._
 import eu.timepit.refined._
 import eu.timepit.refined.api.RefType._
 import eu.timepit.refined.api._
 import eu.timepit.refined.auto._
 import eu.timepit.refined.boolean._
-import eu.timepit.refined.numeric._
-import eu.timepit.refined.string._
+import eu.timepit.refined.cats.syntax._
 import eu.timepit.refined.char._
 import eu.timepit.refined.collection._
 import eu.timepit.refined.generic._
-import eu.timepit.refined.cats.syntax._
+import eu.timepit.refined.numeric._
+import eu.timepit.refined.string._
 import eu.timepit.refined.types.string.NonEmptyString
+import shop.domain.checkout._
 //import eu.timepit.refined.predicates.all.{And, Contains, Forall, Greater, GreaterEqual, Interval, LessEqual, LetterOrDigit, MatchesRegex, MaxSize, NonEmpty, Not, Positive, Size, Url, ValidFloat, ValidInt}
 import io.estatico.newtype.macros.newtype
 import shapeless._
-import shop.domain.brand.Brand
 
 // import eu.timepit.refined.boolean.And
 //import eu.timepit.refined.collection.Size
@@ -84,7 +82,7 @@ object XCheckValueCompileAndRun extends App {
 
 
   val a: Int Refined Greater[5] = 10
-  val b: Int Refined Greater[4] = a
+ // val b: Int Refined Greater[4] = a
  // val c: Int Refined Greater[6] = a
 
   type ZeroToOne = Not[Less[0.0]] And Not[Greater[1.0]]
@@ -169,13 +167,11 @@ strings: EndsWith[s], MatchesRegex[s], Contains[s], Url, ValidFloat
   def lookupu1(username: Congs5T): Option[Congs5T] = None
 //  lookupu1("aeing")
 
+
+
   //horizontale Kombi
   //sequentiell vs parallel siehe XCheckValueDeEncode
   // Parallele validated Conversion
-
-
-
-
   case class HProd(a: NonEmptyString, b: GTFive)
   def toHProd(a: String, b: Int): EitherNel[String, HProd] =
     (NonEmptyString.from(a).toEitherNel, GTFive.from(b).toEitherNel)
@@ -185,6 +181,82 @@ strings: EndsWith[s], MatchesRegex[s], Contains[s], Url, ValidFloat
     (NonEmptyString.from(a).toValidatedNel, GTFive.from(b).toValidatedNel).mapN(HProd.apply)
 
   println(toHProdV("", 2))
+
+
+
+  //paralleles Produkt-Parsen: Ergebnis Produkttyp oder Produkt/Liste der Fehler:
+  /* nötig für cats.NonEmptyParallel[IO,F]:
+   import cats.effect.IO, import scala.concurrent.ExecutionContext.Implicits.global
+   implicit val contextShift = IO.contextShift(global)
+   oder (wie hier) über IOApp
+   */
+  object CardFS {
+    def apply(name: String, number: Long, expiration: String, cvv: Int) =
+      Parallel.parMap4(
+        CardNamePred.from(name).map(CardName(_)),
+        CardNumberPred.from(number).map(CardNumber(_)),
+        CardExpirationPred.from(expiration).map(CardExpiration(_)),
+        CardCVVPred.from(cvv).map(CardCVV(_))
+        //  )(Card)
+      )(Card(_, _, _, _))
+  }
+
+  object CardFL {
+    def apply(name: String, number: Long, expiration: String, cvv: Int) =
+      (
+        CardNamePred.from(name).toEitherNel,
+        CardNumberPred.from(number).toEitherNel ,
+        CardExpirationPred.from(expiration).toEitherNel,
+        CardCVVPred.from(cvv).toEitherNel
+
+        ).parMapN((cna, cnu, ce, cv) => Card(CardName(cna),CardNumber(cnu), CardExpiration(ce), CardCVV(cv)))
+  }
+  /*
+   type ValidatedS[A] = Validated[java.lang.String, A]
+   implicit object NEPV extends cats.NonEmptyParallel[ValidatedS] {
+     override type F[_] = String
+     override def apply: Apply[F] = ???
+     override def flatMap: FlatMap[ValidatedS] = ???
+     override def sequential: ~>[F, ValidatedS] = ???
+     override def parallel: ~>[ValidatedS, F] = ???
+   }
+ */
+
+
+  object CardVL {
+    def apply(name: String, number: Long, expiration: String, cvv: Int) =
+      (
+        CardNamePred.from(name).toValidatedNel,
+        CardNumberPred.from(number).toValidatedNel ,
+        CardExpirationPred.from(expiration).toValidatedNel,
+        CardCVVPred.from(cvv).toValidatedNel
+        ).parMapN((cna, cnu, ce, cv) => Card(CardName(cna),CardNumber(cnu), CardExpiration(ce), CardCVV(cv)))
+  }
+  /*
+    type ValidatedNS[A] = ValidatedNel[java.lang.String, A]
+    implicit object NEPVN extends cats.NonEmptyParallel[ValidatedNS] {
+      override type F[A] = List[A]
+      override def apply: Apply[F] = ???
+      override def flatMap: FlatMap[ValidatedNS] = ???
+      override def sequential: ~>[F, ValidatedNS] = ???
+      override def parallel: ~>[ValidatedNS, F] = ???
+    }
+  */
+  object CardFU {
+    def apply(name: String, number: String, expiration: String, cvv: String) =
+      Card(
+        CardName(Refined.unsafeApply(name)),
+        CardNumber(Refined.unsafeApply(number.toLong)),
+        CardExpiration(Refined.unsafeApply(expiration)),
+        CardCVV(Refined.unsafeApply(cvv.toInt))
+      )
+
+  }
+
+
+
+
+
 
   //Compiletime Check von M <: Int  vgl. "Refined" mit Scala3
   case class Mod[M <: Int](n: Int) extends AnyVal {
