@@ -1,5 +1,6 @@
 package shop.domain
 
+import shop.domain.checkout._
 import cats._
 import cats.data.Validated._
 import cats.data.{EitherNel, ValidatedNel}
@@ -185,6 +186,12 @@ strings: EndsWith[s], MatchesRegex[s], Contains[s], Url, ValidFloat
 
 
   //paralleles Produkt-Parsen: Ergebnis Produkttyp oder Produkt/Liste der Fehler:
+  object CardNameT extends RefinedTypeOps[CardNamePred, String]
+  object CardNumberT extends RefinedTypeOps[CardNumberPred, Long]
+  object CardExpirationT extends RefinedTypeOps[CardExpirationPred, String]
+  object CardCVVPred extends RefinedTypeOps[CardCVVPred, Int]
+  
+  
   /* nötig für cats.NonEmptyParallel[IO,F]:
    import cats.effect.IO, import scala.concurrent.ExecutionContext.Implicits.global
    implicit val contextShift = IO.contextShift(global)
@@ -193,10 +200,10 @@ strings: EndsWith[s], MatchesRegex[s], Contains[s], Url, ValidFloat
   object CardFS {
     def apply(name: String, number: Long, expiration: String, cvv: Int) =
       Parallel.parMap4(
-        CardNamePred.from(name).map(CardName(_)),
-        CardNumberPred.from(number).map(CardNumber(_)),
-        CardExpirationPred.from(expiration).map(CardExpiration(_)),
-        CardCVVPred.from(cvv).map(CardCVV(_))
+        CardNameT.from(name).map(CardName(_)),
+        CardNumberT.from(number).map(CardNumber(_)),
+        CardExpirationT.from(expiration).map(CardExpiration(_)),
+        CardCVVT.from(cvv).map(CardCVV(_))
         //  )(Card)
       )(Card(_, _, _, _))
   }
@@ -204,10 +211,10 @@ strings: EndsWith[s], MatchesRegex[s], Contains[s], Url, ValidFloat
   object CardFL {
     def apply(name: String, number: Long, expiration: String, cvv: Int) =
       (
-        CardNamePred.from(name).toEitherNel,
-        CardNumberPred.from(number).toEitherNel ,
-        CardExpirationPred.from(expiration).toEitherNel,
-        CardCVVPred.from(cvv).toEitherNel
+        CardNameT.from(name).toEitherNel,
+        CardNumberT.from(number).toEitherNel ,
+        CardExpirationT.from(expiration).toEitherNel,
+        CardCVVT.from(cvv).toEitherNel
 
         ).parMapN((cna, cnu, ce, cv) => Card(CardName(cna),CardNumber(cnu), CardExpiration(ce), CardCVV(cv)))
   }
@@ -226,10 +233,10 @@ strings: EndsWith[s], MatchesRegex[s], Contains[s], Url, ValidFloat
   object CardVL {
     def apply(name: String, number: Long, expiration: String, cvv: Int) =
       (
-        CardNamePred.from(name).toValidatedNel,
-        CardNumberPred.from(number).toValidatedNel ,
-        CardExpirationPred.from(expiration).toValidatedNel,
-        CardCVVPred.from(cvv).toValidatedNel
+        CardNameT.from(name).toValidatedNel,
+        CardNumberT.from(number).toValidatedNel ,
+        CardExpirationT.from(expiration).toValidatedNel,
+        CardCVVT.from(cvv).toValidatedNel
         ).parMapN((cna, cnu, ce, cv) => Card(CardName(cna),CardNumber(cnu), CardExpiration(ce), CardCVV(cv)))
   }
   /*
@@ -253,6 +260,17 @@ strings: EndsWith[s], MatchesRegex[s], Contains[s], Url, ValidFloat
 
   }
 
+  //sequentielles Produkt-Parsen: Ergebnis Produkttyp oder erster Fehler (fail fast):
+  object CardFF {
+    def apply(name: String, number: Long, expiration: String, cvv: Int) =
+      for {
+        name       <- CardNameT.from(name)
+        number     <- CardNumberT.from(number)
+        expiration <- CardExpirationT.from(expiration)
+        cvv        <- CardCVVT.from(cvv)
+      } yield Card(CardName(name), CardNumber(number), CardExpiration(expiration), CardCVV(cvv))
+
+  }
 
 
 
