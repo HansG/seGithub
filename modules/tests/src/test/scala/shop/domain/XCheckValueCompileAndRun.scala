@@ -184,12 +184,18 @@ strings: EndsWith[s], MatchesRegex[s], Contains[s], Url, ValidFloat
   println(toHProdV("", 2))
 
 
-
+  import eu.timepit.refined.auto._
+  implicit def validateSizeN[N <: Int, R](implicit w: ValueOf[N]): Validate.Plain[R, Size[N]] =
+    Validate.fromPredicate[R, Size[N]](
+      _.toString.size == w.value,
+      _ => s"Must have ${w.value} digits",
+      Size[N](w.value)
+    )
   //paralleles Produkt-Parsen: Ergebnis Produkttyp oder Produkt/Liste der Fehler:
   object CardNameT extends RefinedTypeOps[CardNamePred, String]
   object CardNumberT extends RefinedTypeOps[CardNumberPred, Long]
   object CardExpirationT extends RefinedTypeOps[CardExpirationPred, String]
-  object CardCVVPred extends RefinedTypeOps[CardCVVPred, Int]
+  object CardCVVT extends RefinedTypeOps[CardCVVPred, Int]
   
   
   /* nötig für cats.NonEmptyParallel[IO,F]:
