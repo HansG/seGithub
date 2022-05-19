@@ -32,7 +32,7 @@ import shapeless._
 
 
 //Überprüfung von Werten zur Compiletime - und Runtime
-object XCheckValueCompileAndRun extends App {
+object XRefinedTypes_Apply extends App {
 
   //https://tech.ovoenergy.com/safe-expressive-code-with-refinement-types/?msclkid=bde8b5c4a5e511ec9a9bdf04c8d62d95
   //Validierung zur Compiletime nur  mit (String-)Literal:
@@ -116,7 +116,7 @@ object XCheckValueCompileAndRun extends App {
 
 
 
-  type MasszahlT = Double Refined Interval.Closed[0.0, 500.0]
+  type MasszahlT = Double Refined Interval.Closed[-50.0, 500.0]
 
   @newtype
   case class Celsius(num: MasszahlT)
@@ -191,13 +191,28 @@ strings: EndsWith[s], MatchesRegex[s], Contains[s], Url, ValidFloat
       _ => s"Must have ${w.value} digits",
       Size[N](w.value)
     )
+
+
   //paralleles Produkt-Parsen: Ergebnis Produkttyp oder Produkt/Liste der Fehler:
   object CardNameT extends RefinedTypeOps[CardNamePred, String]
   object CardNumberT extends RefinedTypeOps[CardNumberPred, Long]
   object CardExpirationT extends RefinedTypeOps[CardExpirationPred, String]
   object CardCVVT extends RefinedTypeOps[CardCVVPred, Int]
-  
-  
+
+
+  //sequentielles Produkt-Parsen: Ergebnis Produkttyp oder erster Fehler (fail fast):
+  object CardFF {
+    def apply(name: String, number: Long, expiration: String, cvv: Int) =
+      for {
+        name       <- CardNameT.from(name)
+        number     <- CardNumberT.from(number)
+        expiration <- CardExpirationT.from(expiration)
+        cvv        <- CardCVVT.from(cvv)
+      } yield Card(CardName(name), CardNumber(number), CardExpiration(expiration), CardCVV(cvv))
+
+  }
+
+
   /* nötig für cats.NonEmptyParallel[IO,F]:
    import cats.effect.IO, import scala.concurrent.ExecutionContext.Implicits.global
    implicit val contextShift = IO.contextShift(global)
@@ -221,20 +236,8 @@ strings: EndsWith[s], MatchesRegex[s], Contains[s], Url, ValidFloat
         CardNumberT.from(number).toEitherNel ,
         CardExpirationT.from(expiration).toEitherNel,
         CardCVVT.from(cvv).toEitherNel
-
         ).parMapN((cna, cnu, ce, cv) => Card(CardName(cna),CardNumber(cnu), CardExpiration(ce), CardCVV(cv)))
   }
-  /*
-   type ValidatedS[A] = Validated[java.lang.String, A]
-   implicit object NEPV extends cats.NonEmptyParallel[ValidatedS] {
-     override type F[_] = String
-     override def apply: Apply[F] = ???
-     override def flatMap: FlatMap[ValidatedS] = ???
-     override def sequential: ~>[F, ValidatedS] = ???
-     override def parallel: ~>[ValidatedS, F] = ???
-   }
- */
-
 
   object CardVL {
     def apply(name: String, number: Long, expiration: String, cvv: Int) =
@@ -243,18 +246,15 @@ strings: EndsWith[s], MatchesRegex[s], Contains[s], Url, ValidFloat
         CardNumberT.from(number).toValidatedNel ,
         CardExpirationT.from(expiration).toValidatedNel,
         CardCVVT.from(cvv).toValidatedNel
-        ).parMapN((cna, cnu, ce, cv) => Card(CardName(cna),CardNumber(cnu), CardExpiration(ce), CardCVV(cv)))
+        ).mapN((cna, cnu, ce, cv) => Card(CardName(cna),CardNumber(cnu), CardExpiration(ce), CardCVV(cv)))
   }
-  /*
-    type ValidatedNS[A] = ValidatedNel[java.lang.String, A]
-    implicit object NEPVN extends cats.NonEmptyParallel[ValidatedNS] {
-      override type F[A] = List[A]
-      override def apply: Apply[F] = ???
-      override def flatMap: FlatMap[ValidatedNS] = ???
-      override def sequential: ~>[F, ValidatedNS] = ???
-      override def parallel: ~>[ValidatedNS, F] = ???
-    }
-  */
+  /* für parMapN fehlt
+    type ValidatedS[A] = Validated[java.lang.String, A]
+   implicit object NEPV extends cats.NonEmptyParallel[ValidatedS]
+   type ValidatedNS[A] = ValidatedNel[java.lang.String, A]
+    implicit object NEPVN extends cats.NonEmptyParallel[ValidatedNS]   */
+
+
   object CardFU {
     def apply(name: String, number: String, expiration: String, cvv: String) =
       Card(
@@ -266,17 +266,6 @@ strings: EndsWith[s], MatchesRegex[s], Contains[s], Url, ValidFloat
 
   }
 
-  //sequentielles Produkt-Parsen: Ergebnis Produkttyp oder erster Fehler (fail fast):
-  object CardFF {
-    def apply(name: String, number: Long, expiration: String, cvv: Int) =
-      for {
-        name       <- CardNameT.from(name)
-        number     <- CardNumberT.from(number)
-        expiration <- CardExpirationT.from(expiration)
-        cvv        <- CardCVVT.from(cvv)
-      } yield Card(CardName(name), CardNumber(number), CardExpiration(expiration), CardCVV(cvv))
-
-  }
 
 
 
