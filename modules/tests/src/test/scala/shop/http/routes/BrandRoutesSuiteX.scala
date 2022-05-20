@@ -29,13 +29,14 @@ import shop.generators._
 import shop.http.clients.PaymentClient
 import shop.http.routes.BrandRoutesSuiteX.{dataBrands, dataBrands1}
 import shop.modules.HttpClients
-import shop.programs.CheckoutSuite.F
 import shop.resources.{MkHttpClient, MkHttpServer}
 import shop.services.Brands
 import suite.HttpSuite
 import weaver.TestOutcome
 
 import java.util.UUID
+import java.util.concurrent.TimeUnit
+import scala.concurrent.duration.FiniteDuration
 
 object AppX extends  IOApp {
   override def run(args: List[String]): IO[ExitCode] = {
@@ -107,10 +108,10 @@ object StartExX extends IOApp {
 object MainX extends IOApp.Simple {
 
   implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
-  val loggers: HttpApp[F] => HttpApp[F] = {
-    { http: HttpApp[F] =>
+  val loggers: HttpApp[IO] => HttpApp[IO] = {
+    { http: HttpApp[IO] =>
       RequestLogger.httpApp(true, true)(http)
-    } andThen { http: HttpApp[F] =>
+    } andThen { http: HttpApp[IO] =>
       ResponseLogger.httpApp(true, true)(http)
     }
   }
@@ -120,7 +121,7 @@ object MainX extends IOApp.Simple {
    def runScd: IO[Unit] =
     ConfigX.dcfg.flatMap { cfg =>
       Logger[IO].info(s"Loaded config $cfg") >>
-        MkHttpClient[F]
+        MkHttpClient[IO]
           .newEmber(cfg.httpClientConfig)
           .map { client =>
             val brandRoutes =
@@ -136,8 +137,9 @@ object MainX extends IOApp.Simple {
               MkHttpServer[IO].newEmber(cfg, httpApp).map(server => (clientb, server))
           }.use {
           case (clientb, server) => {
+            clientb.process.flatMap( IO.println(_))
             //pclient Aufrufe!!!!!!
-            IO.never
+          //  IO.never
           }
 
         }
@@ -148,7 +150,7 @@ object MainX extends IOApp.Simple {
    def runFst: IO[Unit] =
     ConfigX.dcfg.flatMap { cfg =>
       Logger[IO].info(s"Loaded config $cfg") >>
-        MkHttpClient[F]
+        MkHttpClient[IO]
           .newEmber(cfg.httpClientConfig)
           .map { client =>
             val brandRoutes =
@@ -173,23 +175,22 @@ object MainY extends IOApp.Simple {
 
   override def run: IO[Unit] = runClient
 
+  def useClient(cl : BrandClientX) = cl.process.flatMap{  li => IO.println(li)}
+
+  def useClient1(cl : BrandClientX) =
+    fs2.Stream.fixedRate[IO](FiniteDuration(1, TimeUnit.SECONDS)).take(10).evalMap(_ => useClient(cl)).compile.drain
+
+
   def runClient =     ConfigX.dcfg.flatMap { cfg =>
     Logger[IO].info(s"Loaded config $cfg") >>
-      MkHttpClient[F]
+      MkHttpClient[IO]
         .newEmber(cfg.httpClientConfig)
         .map { client =>  BrandClientX.make(cfg.paymentConfig, client)  }
-        .use { pclient =>
-          pclient.process.flatMap{  li => IO.println(li)}
+        .use { useClient1
         }
   }
 
-
-
-
-
-
 }
-
 
 
 case class AppConfigX(httpClientConfig: HttpClientConfig, paymentConfig :PaymentConfig,  httpServerConfig: HttpServerConfig)
@@ -207,7 +208,7 @@ object BrandClientX {
   def make( cfg: PaymentConfig, client: Client[IO] ): BrandClientX =
     new BrandClientX with Http4sClientDsl[IO] {
       def process: IO[List[Brand]] =
-        Uri.fromString(cfg.uri.value + "/brands").liftTo[IO].flatMap { uri =>
+        Uri.fromString(cfg.uri.value + "/v1/brands").liftTo[IO].flatMap { uri =>
           client.run(GET(uri)).use { resp =>
             resp.status match {
               case Status.Ok | Status.Conflict =>

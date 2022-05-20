@@ -39,7 +39,8 @@ lazy val tests = (project in file("modules/tests"))
       Libraries.weaverCats,
       Libraries.weaverDiscipline,
       Libraries.weaverScalaCheck
-    )
+     // , "javafx" % "javafx" % "2.2.7"
+)
   )
   .dependsOn(core)
 
