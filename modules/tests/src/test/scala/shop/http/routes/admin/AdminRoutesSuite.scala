@@ -1,4 +1,4 @@
-package shop.http.routes.admin
+package shop.http.routes.secured
 
 import shop.domain.brand._
 import shop.domain.item._
@@ -24,18 +24,17 @@ object AdminRoutesSuite extends HttpSuite {
   def authMiddleware(authUser: AdminUser): AuthMiddleware[IO, AdminUser] =
     AuthMiddleware(Kleisli.pure(authUser))
 
-  test("POST create brand X") {
-    //2022XX  NEXTX
+  test("POST create brand") {
     val gen = for {
       i <- brandIdGen
+      u <- adminUserGen
       b <- brandParamGen
-    } yield (i,  b)
+    } yield (i, u, b)
 
-    //2022XX
     forall(gen) {
-      case (id,   brand) =>
+      case (id, user, brand) =>
         val req      = POST(brand, uri"/brands")
-        val routes   = AdminBrandRoutesX[IO](new TestBrands(id)).routes
+        val routes   = AdminBrandRoutes[IO](new TestBrands(id)).routes(authMiddleware(user))
         val expected = JsonObject.singleton("brand_id", id.asJson).asJson
         expectHttpBodyAndStatus(routes, req)(expected, Status.Created)
     }
