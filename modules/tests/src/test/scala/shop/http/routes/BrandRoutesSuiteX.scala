@@ -1,10 +1,13 @@
 package shop.http.routes
 
 import cats.effect._
+import cats.syntax.all._
 import ciris.env
 import com.comcast.ip4s.Literals.port
+import eu.timepit.refined.types.string.NonEmptyString
 import org.http4s.Method._
 import org.http4s._
+import org.http4s.circe.CirceEntityCodec.circeEntityEncoder
 import org.http4s.circe.{JsonDecoder, toMessageSyntax}
 import org.http4s.client.Client
 import org.http4s.client.dsl.Http4sClientDsl
@@ -13,6 +16,7 @@ import org.http4s.implicits.http4sKleisliResponseSyntaxOptionT
 import org.http4s.server.Router
 import org.http4s.server.middleware.{RequestLogger, ResponseLogger}
 import org.http4s.syntax.literals._
+import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.Gen
 import org.scalacheck.rng.Seed
 import org.typelevel.log4cats.Logger
@@ -20,7 +24,7 @@ import org.typelevel.log4cats.slf4j.Slf4jLogger
 import shop.config.AppEnvironment
 import shop.config.AppEnvironment.{Prod, Test}
 import shop.config.types.{HttpClientConfig, HttpServerConfig, PaymentConfig, PaymentURI}
-import shop.domain.ID
+import shop.domain.{ID, brand}
 import shop.domain.ID._
 import shop.domain.brand._
 import shop.domain.order.{PaymentError, PaymentId}
@@ -28,9 +32,11 @@ import shop.domain.payment.Payment
 import shop.generators._
 import shop.http.clients.PaymentClient
 import shop.http.routes.BrandRoutesSuiteX.{dataBrands, dataBrands1}
+import shop.http.routes.admin.AdminBrandRoutesX
 import shop.modules.HttpClients
 import shop.resources.{MkHttpClient, MkHttpServer}
 import shop.services.Brands
+import skunk.syntax.id
 import suite.HttpSuite
 import weaver.TestOutcome
 
@@ -152,12 +158,16 @@ object MainX extends IOApp.Simple {
       Logger[IO].info(s"Loaded config $cfg") >>
         MkHttpClient[IO]
           .newEmber(cfg.httpClientConfig)
-          .map { client =>
+          .map { client =>   //wird hier nicht verwendet .... newEmber nur wegen lift zu Ressource
             val brandRoutes =
               BrandRoutes[IO](dataBrands1).routes
             //  val brandRoutes = BrandRoutes[IO](failingBrands(List(Brand(BrandId(UUID.randomUUID()), BrandName("brand1"))))).routes
-            val brandApp = loggers(Router(version.v1 -> brandRoutes).orNotFound)
-            val clients  = BrandClientX.make(cfg.paymentConfig, client)
+            val adminRoutes   = AdminBrandRoutesX[IO](dataBrands1).routes
+
+            val myRoutes = brandRoutes  <+> adminRoutes
+
+            val brandApp = loggers(Router(version.v1 -> myRoutes ).orNotFound)
+       //     val clients  = BrandClientX.make(cfg.paymentConfig, client)
 
             cfg.httpServerConfig -> brandApp
           }
@@ -210,6 +220,21 @@ object BrandClientX {
       def process: IO[List[Brand]] =
         Uri.fromString(cfg.uri.value + "/v1/brands").liftTo[IO].flatMap { uri =>
           client.run(GET(uri)).use { resp =>
+            resp.status match {
+              case Status.Ok | Status.Conflict =>
+                 resp.asJsonDecode[List[Brand]]
+              case st =>
+                PaymentError(
+                  Option(st.reason).getOrElse("unknown")
+                ).raiseError[IO, List[Brand]]
+            }
+          }
+        }
+
+      def processX(brandP : BrandName): IO[List[Brand]] =
+        Uri.fromString(cfg.uri.value + "/v1/brandsX").liftTo[IO].flatMap { uri =>
+          client.run(   POST(brandP, uri"/brandsX")
+          ).use { resp =>
             resp.status match {
               case Status.Ok | Status.Conflict =>
                  resp.asJsonDecode[List[Brand]]

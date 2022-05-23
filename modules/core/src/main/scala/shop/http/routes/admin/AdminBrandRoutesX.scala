@@ -18,13 +18,13 @@ final case class AdminBrandRoutesX[F[_]: JsonDecoder: MonadThrow](
     brands: Brands[F]
 ) extends Http4sDsl[F] {
 
-  private[admin] val prefixPath = "/brands"
+  private[admin] val prefixPath = "/brandsX"
 
   private val httpRoutes:  HttpRoutes[F] =
     HttpRoutes.of {
       case req @ POST -> Root =>
-         req.decodeR[BrandParam] { bp =>
-          brands.create(bp.toDomain).flatMap { id =>
+         req.decodeR[BrandName] { bp =>
+          brands.create(bp).flatMap { id => //.toDomain
             Created(JsonObject.singleton("brand_id", id.asJson))
           }
         }

@@ -21,11 +21,11 @@ object brand {
   @newtype
   case class BrandId(value: UUID)
 
-  /*  object BrandId {
+   object BrandId {
     implicit val identityBrandId: IsUUID[BrandId] = new IsUUID[BrandId] {
       val _UUID = Iso[UUID, BrandId](BrandId(_))(_.value)
     }
-  }*/
+  }
 
   @derive(decoder, encoder, eqv, show)
   @newtype
