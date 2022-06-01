@@ -179,6 +179,7 @@ object generators extends App {
   lazy val brandParamGen: Gen[BrandParam] =
     arbitrary[NonEmptyString].map(BrandParam(_))
 
+
   //2022XX
   lazy val createItemParamGen: Gen[CreateItemParam] =
     for {

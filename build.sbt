@@ -12,7 +12,6 @@ resolvers += Resolver.sonatypeRepo("snapshots")
 resolvers += Resolver.mavenCentral
 resolvers += "mvnrepository" at "https://mvnrepository.com/artifact"
 
-
 val scalafixCommonSettings = inConfig(IntegrationTest)(scalafixConfigSettings(IntegrationTest))
 lazy val root = (project in file("."))
   .settings(
@@ -38,11 +37,14 @@ lazy val tests = (project in file("modules/tests"))
       Libraries.refinedScalacheck,
       Libraries.weaverCats,
       Libraries.weaverDiscipline,
+      Libraries.logback % Runtime,
       Libraries.weaverScalaCheck
-     // , "javafx" % "javafx" % "2.2.7"
-)
+    )
   )
   .dependsOn(core)
+
+
+lazy val javaFXModules = Seq("base", "controls", "fxml", "graphics", "media", "swing", "web")
 
 lazy val core = (project in file("modules/core"))
   .enablePlugins(DockerPlugin)
@@ -94,8 +96,9 @@ lazy val core = (project in file("modules/core"))
       Libraries.skunkCore,
       Libraries.skunkCirce,
       Libraries.squants,
-      "com.lihaoyi" %% "ammonite" % "2.5.3"  cross CrossVersion.full
-     )
+      "com.lihaoyi" %% "ammonite" % "2.5.3" cross CrossVersion.full
+    ),
+    libraryDependencies ++= javaFXModules.map(m => "org.openjfx" % s"javafx-$m" % "11" classifier "win")
   )
 
 addCommandAlias("runLinter", ";scalafixAll --rules OrganizeImports")

@@ -17,11 +17,11 @@ import io.estatico.newtype.macros.newtype
 import monocle.Iso
 
 object brand {
-  @derive(decoder, encoder, eqv, show, uuid)
+  @derive(decoder, encoder, eqv, show) //, uuid
   @newtype
   case class BrandId(value: UUID)
 
-   object BrandId {
+  object BrandId {
     implicit val identityBrandId: IsUUID[BrandId] = new IsUUID[BrandId] {
       val _UUID = Iso[UUID, BrandId](BrandId(_))(_.value)
     }
@@ -32,6 +32,8 @@ object brand {
   case class BrandName(value: String) {
     def toBrand(brandId: BrandId): Brand =
       Brand(brandId, this)
+
+    def toString1: String = { "BrandName:" + value }
   }
 
   @derive(queryParam, show)

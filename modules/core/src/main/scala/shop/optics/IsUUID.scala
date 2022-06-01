@@ -1,9 +1,9 @@
 package shop.optics
 
+import cats.evidence.Is
+
 import java.util.UUID
-
 import shop.ext.derevo.Derive
-
 import monocle.Iso
 
 trait IsUUID[A] {

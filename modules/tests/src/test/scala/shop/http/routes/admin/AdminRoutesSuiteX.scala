@@ -28,19 +28,19 @@ object AdminRoutesSuiteX extends HttpSuite {
     //2022XX  NEXTX
     val gen = for {
       i <- brandIdGen
-      b <- brandParamGen
+      b <- brandNameGen
     } yield (i,  b)
 
     //2022XX
     forall(gen) {
       case (id,   brand) =>
-        val req      = POST(brand, uri"/brands")
+        val req      = POST(brand, uri"/brandsX")
         val routes   = AdminBrandRoutesX[IO](new TestBrands(id)).routes
         val expected = JsonObject.singleton("brand_id", id.asJson).asJson
         expectHttpBodyAndStatus(routes, req)(expected, Status.Created)
     }
   }
-
+/*
   test("POST create item") {
     val gen = for {
       i <- itemIdGen
@@ -56,7 +56,7 @@ object AdminRoutesSuiteX extends HttpSuite {
         expectHttpBodyAndStatus(routes, req)(expected, Status.Created)
     }
   }
-
+*/
 }
 
 protected class TestBrands(id: BrandId) extends Brands[IO] {

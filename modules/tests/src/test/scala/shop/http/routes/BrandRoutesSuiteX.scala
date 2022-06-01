@@ -5,6 +5,7 @@ import cats.syntax.all._
 import ciris.env
 import com.comcast.ip4s.Literals.port
 import eu.timepit.refined.types.string.NonEmptyString
+import io.circe.syntax.EncoderOps
 import org.http4s.Method._
 import org.http4s._
 import org.http4s.circe.CirceEntityCodec.circeEntityEncoder
@@ -187,6 +188,9 @@ object MainY extends IOApp.Simple {
 
   def useClient(cl : BrandClientX) = cl.process.flatMap{  li => IO.println(li)}
 
+  def useClientA(cl : BrandClientX, bn : BrandName) =
+    cl.processX(bn).flatMap{  li => IO.println(li )}
+
   def useClient1(cl : BrandClientX) =
     fs2.Stream.fixedRate[IO](FiniteDuration(1, TimeUnit.SECONDS)).take(10).evalMap(_ => useClient(cl)).compile.drain
 
@@ -196,7 +200,9 @@ object MainY extends IOApp.Simple {
       MkHttpClient[IO]
         .newEmber(cfg.httpClientConfig)
         .map { client =>  BrandClientX.make(cfg.paymentConfig, client)  }
-        .use { useClient1
+        .use { cl =>
+          useClientA(cl, BrandName("Sepp"))
+          // useClient(cl)
         }
   }
 
@@ -212,6 +218,7 @@ import cats.syntax.all._
 
 trait BrandClientX {
   def process: IO[List[Brand]]
+  def processX(brandP : BrandName): IO[Brand]
 }
 
 object BrandClientX {
@@ -231,17 +238,17 @@ object BrandClientX {
           }
         }
 
-      def processX(brandP : BrandName): IO[List[Brand]] =
-        Uri.fromString(cfg.uri.value + "/v1/brandsX").liftTo[IO].flatMap { uri =>
-          client.run(   POST(brandP, uri"/brandsX")
+      def processX(brandP : BrandName): IO[Brand] =
+        Uri.fromString(cfg.uri.value + "/v1").liftTo[IO].flatMap { uri =>
+          client.run(   POST(brandP, uri/"brandsX")
           ).use { resp =>
             resp.status match {
-              case Status.Ok | Status.Conflict =>
-                 resp.asJsonDecode[List[Brand]]
+              case Status.Created | Status.Conflict =>
+                 resp.asJsonDecode[Brand]
               case st =>
                 PaymentError(
                   Option(st.reason).getOrElse("unknown")
-                ).raiseError[IO, List[Brand]]
+                ).raiseError[IO, Brand]
             }
           }
         }
@@ -280,6 +287,12 @@ object ConfigX {
 }
 
 protected class TestBrandsX extends Brands[IO] {
-  def create(name: BrandName): IO[BrandId] = make[IO, BrandId]
+  implicit val logger = Slf4jLogger.getLogger[IO]
   def findAll: IO[List[Brand]]             = IO.pure(List.empty)
+  def create1(name: BrandName): IO[BrandId] =   make[IO, BrandId]
+  def create(name: BrandName): IO[BrandId] = Logger[IO].info(s"@server: name.toString= ${name.toString1}") >>
+      make[IO, BrandId].flatTap(bi => IO(println(s"@server: BrandId=${bi.asJson.spaces2SortKeys}")))
+
+
+
 }
