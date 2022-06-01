@@ -1,13 +1,13 @@
 package exa
 
 import cats.effect._
+import cats.effect.std.Queue
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
-import fs2.Chunk.Queue
 import fs2._
 import javafx.application._
 import javafx.beans.value.WritableValue
-import javafx.scene._
+import javafx.scene.{Node, _}
 import javafx.scene.control._
 import javafx.scene.input._
 import javafx.scene.layout._
@@ -18,7 +18,7 @@ import scala.util.Try
 
 class Fs2Ui extends Application {
   override def start(primaryStage: Stage): Unit = {
-    implicit val cs: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
+    implicit val cs: ContextShift[IO] = IO.executionContext (ExecutionContext.global)
     implicit val timer: Timer[IO] = IO.timer(ExecutionContext.global)
     implicit val blocker = Blocker.liftExecutionContext(scala.concurrent.ExecutionContext.global)
 
@@ -26,7 +26,7 @@ class Fs2Ui extends Application {
     new Logic[IO]().run(primaryStage).start.unsafeRunSync()
   }
 
-  class Logic[F[_]: ConcurrentEffect: ContextShift: Timer] {
+  class Logic[F[_]: Concurrent  ] {
     import Fs2Ui._
 
     import java.time.{Duration, Instant}
@@ -37,11 +37,32 @@ class Fs2Ui extends Application {
       View(input, feedback) = v
 
       _ <- Stream(input).covary[F]
-        .through(typedChars)
+        .through( typedChars )
         .through(processInput)
         .through(displayFeedback(feedback.textProperty))
         .compile.drain
     } yield ()
+
+
+    def run2(primaryStage: Stage): F[Unit] = for {
+      v <- initializeUi(primaryStage)
+      View(input, feedback) = v
+
+      evSrc <- Stream.eval(Fs2Ui.typedCharsSource(input))
+                .flatMap( evs => evs.read )
+                .map(tc =>   displayFeedback(feedback.textProperty))
+        .compile.drain
+    } yield ()
+
+    def run1(primaryStage: Stage): F[EventSource[F[]]] = {
+       initializeUi(primaryStage).flatMap {
+       v =>  {
+         val View(input, feedback) = v
+         Fs2Ui.typedCharsSource(input)
+       }
+    }
+    }
+
 
     private def initializeUi(primaryStage: Stage): F[View] = updateUi {
       val input = new TextField()
@@ -59,6 +80,12 @@ class Fs2Ui extends Application {
     }
 
     private def processInput: Pipe[F, TypedChar, Feedback] = for {
+      typed <- _
+      res <- Stream.eval { time(processSingle(typed)) }
+      (d, Feedback(str)) = res
+    } yield Feedback(s"$str in [$d]")
+
+    private def processInput_1: Pipe[F, TypedChar, Feedback] = for {
       typed <- _
       _ <- Stream.eval(ContextShift[F].shift)
       res <- Stream.eval { time(processSingle(typed)) }
@@ -96,7 +123,8 @@ object Fs2Ui {
   case class TypedChar(value: String)
   case class Feedback(value: String)
 
-  private def typedChars[F[_]: ConcurrentEffect]: Pipe[F, Node, TypedChar] = for {
+  /*
+  private def typedChars[F[_]: Concurrent]: Pipe[F, Node, TypedChar] = for {
     node <- _
     q <- Stream.eval(Sync[F].delay(Queue.empty[KeyEvent]))
     _ <- Stream.eval(Sync[F].delay {
@@ -104,6 +132,17 @@ object Fs2Ui {
     })
     keyEvent <- q.chunks.dequeue
   } yield TypedChar(keyEvent.getCharacter)
+*/
+  def typedCharsSource[F[_]: Concurrent](node : Node) = {
+    for {
+      qu <- Queue.bounded[F, KeyEvent](20)
+    } yield new EventSource(node, qu)
+  }
+
+  class EventSource[F[_]: Concurrent](node : Node, qu : Queue[F, KeyEvent]){
+    node.setOnKeyTyped { evt => (qu.offer(evt)) }
+    def read: Stream[F, TypedChar] = Stream.fromQueueUnterminated(qu).map( (ke:KeyEvent) =>  TypedChar(ke.getCharacter))
+  }
 
   private def updateValue[F[_]: Async, A](value: WritableValue[A]): Pipe[F, A, Unit] = for {
     a <- _
