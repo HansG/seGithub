@@ -32,7 +32,7 @@ class Fs2Ui extends Application {
     import java.time.{Duration, Instant}
     import java.util.concurrent.TimeUnit.MILLISECONDS
 
-    def run(primaryStage: Stage): F[Unit] = for {
+  /*  def run(primaryStage: Stage): F[Unit] = for {
       v <- initializeUi(primaryStage)
       View(input, feedback) = v
 
@@ -41,10 +41,10 @@ class Fs2Ui extends Application {
         .through(processInput)
         .through(displayFeedback(feedback.textProperty))
         .compile.drain
-    } yield ()
+    } yield ()*/
 
 
-    def run2(primaryStage: Stage): F[Unit] = for {
+    def run(primaryStage: Stage): F[Unit] = for {
       v <- initializeUi(primaryStage)
       View(input, feedback) = v
 
