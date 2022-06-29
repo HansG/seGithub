@@ -26,7 +26,7 @@ class Fs2Ui extends Application {
     new Logic[IO]().run(primaryStage).start.unsafeRunSync()
   }
 
-  class Logic[F[_]: Concurrent  ] {
+  class Logic[F[_]: Concurrent : Logger ] {
     import Fs2Ui._
 
     import java.time.{Duration, Instant}
