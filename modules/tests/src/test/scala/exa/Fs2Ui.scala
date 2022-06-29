@@ -15,18 +15,22 @@ import javafx.stage._
 
 import scala.concurrent.ExecutionContext
 import scala.util.Try
+import scala.concurrent._
+import scala.concurrent.ExecutionContext.Implicits._
+import scala.concurrent.ExecutionContext.global
 
 class Fs2Ui extends Application {
+
   override def start(primaryStage: Stage): Unit = {
-    implicit val cs: ContextShift[IO] = IO.executionContext (ExecutionContext.global)
-    implicit val timer: Timer[IO] = IO.timer(ExecutionContext.global)
-    implicit val blocker = Blocker.liftExecutionContext(scala.concurrent.ExecutionContext.global)
+    implicit val cs: IO[ExecutionContext] = IO.executionContext //(ExecutionContext.global)
+   // implicit val timer  = IO.timer(ExecutionContext.global)
+  //  implicit val blocker = Blocker.liftExecutionContext(scala.concurrent.ExecutionContext.global)
 
 
     new Logic[IO]().run(primaryStage).start.unsafeRunSync()
   }
 
-  class Logic[F[_]: Concurrent : Logger ] {
+  class Logic[IO[_]: Concurrent ] {//: Logger
     import Fs2Ui._
 
     import java.time.{Duration, Instant}
@@ -36,7 +40,7 @@ class Fs2Ui extends Application {
       v <- initializeUi(primaryStage)
       View(input, feedback) = v
 
-      _ <- Stream(input).covary[F]
+      _ <- Stream(input).covary[IO]
         .through( typedChars )
         .through(processInput)
         .through(displayFeedback(feedback.textProperty))
@@ -44,7 +48,7 @@ class Fs2Ui extends Application {
     } yield ()*/
 
 
-    def run(primaryStage: Stage): F[Unit] = for {
+    def run(primaryStage: Stage): IO[Unit] = for {
       v <- initializeUi(primaryStage)
       View(input, feedback) = v
 
@@ -54,7 +58,7 @@ class Fs2Ui extends Application {
         .compile.drain
     } yield ()
 
-    def run1(primaryStage: Stage): F[EventSource[F[]]] = {
+    def run1(primaryStage: Stage): IO[EventSource[IO]] = {
        initializeUi(primaryStage).flatMap {
        v =>  {
          val View(input, feedback) = v
@@ -64,7 +68,7 @@ class Fs2Ui extends Application {
     }
 
 
-    private def initializeUi(primaryStage: Stage): F[View] = updateUi {
+    private def initializeUi(primaryStage: Stage): IO[View] = updateUi {
       val input = new TextField()
       input.setPrefWidth(300)
       val feedback = new Label("...")
@@ -79,24 +83,24 @@ class Fs2Ui extends Application {
       View(input, feedback)
     }
 
-    private def processInput: Pipe[F, TypedChar, Feedback] = for {
+    private def processInput: Pipe[IO, TypedChar, Feedback] = for {
       typed <- _
       res <- Stream.eval { time(processSingle(typed)) }
       (d, Feedback(str)) = res
     } yield Feedback(s"$str in [$d]")
 
-    private def processInput_1: Pipe[F, TypedChar, Feedback] = for {
+    private def processInput_1: Pipe[IO, TypedChar, Feedback] = for {
       typed <- _
-      _ <- Stream.eval(ContextShift[F].shift)
+   //   _ <- Stream.eval(ContextShift[IO].shift)
       res <- Stream.eval { time(processSingle(typed)) }
       (d, Feedback(str)) = res
     } yield Feedback(s"$str in [$d]")
 
-    private def displayFeedback(value: WritableValue[String]): Pipe[F, Feedback, Unit] =
+    private def displayFeedback(value: WritableValue[String]): Pipe[IO, Feedback, Unit] =
       _.map { case Feedback(str) => str } through updateValue(value)
 
-    private def time[A](f: F[A]): F[(Duration, A)] = {
-      val now = Timer[F].clock.monotonic(MILLISECONDS).map(Instant.ofEpochMilli)
+    private def time[A](f: IO[A]): IO[(Duration, A)] = {
+      val now = IO.monotonic.map(d => Instant.ofEpochMilli(d.toMillis) )
       for {
         start <- now
         a <- f
@@ -105,14 +109,14 @@ class Fs2Ui extends Application {
       } yield (d, a)
     }
 
-    private val processSingle: TypedChar => F[Feedback] = {
-      import scala.concurrent.duration._
+    private val processSingle: TypedChar => IO[Feedback] = {c =>
+    import scala.concurrent.duration._
       import scala.util.Random
 
       val prng = new Random()
-      def randomDelay: F[Unit] = Timer[F].sleep { (250 + prng.nextInt(750)).millis }
+      def randomDelay: IO[Unit] = IO.sleep( { (250 + prng.nextInt(750)).millis })
 
-      c => randomDelay *> Sync[F].delay(Feedback(s"processed $c"))
+      randomDelay *>  IO.delay(Feedback(s"processed $c"))
     }
   }
 }
@@ -124,35 +128,36 @@ object Fs2Ui {
   case class Feedback(value: String)
 
   /*
-  private def typedChars[F[_]: Concurrent]: Pipe[F, Node, TypedChar] = for {
+  private def typedChars[IO[_]: Concurrent]: Pipe[IO, Node, TypedChar] = for {
     node <- _
-    q <- Stream.eval(Sync[F].delay(Queue.empty[KeyEvent]))
-    _ <- Stream.eval(Sync[F].delay {
+    q <- Stream.eval(Sync[IO].delay(Queue.empty[KeyEvent]))
+    _ <- Stream.eval(Sync[IO].delay {
       node.setOnKeyTyped { evt => (q.chunks.enqueue(evt)) }
     })
     keyEvent <- q.chunks.dequeue
   } yield TypedChar(keyEvent.getCharacter)
 */
-  def typedCharsSource[F[_]: Concurrent](node : Node) = {
+  def typedCharsSource[IO[_]: Concurrent](node : Node) = {
     for {
-      qu <- Queue.bounded[F, KeyEvent](20)
+      qu <- Queue.bounded[IO, KeyEvent](20)
     } yield new EventSource(node, qu)
   }
 
-  class EventSource[F[_]: Concurrent](node : Node, qu : Queue[F, KeyEvent]){
+  class EventSource[IO[_]: Concurrent](node : Node, qu : Queue[IO, KeyEvent]){
     node.setOnKeyTyped { evt => (qu.offer(evt)) }
-    def read: Stream[F, TypedChar] = Stream.fromQueueUnterminated(qu).map( (ke:KeyEvent) =>  TypedChar(ke.getCharacter))
+    def read: Stream[IO, TypedChar] = Stream.fromQueueUnterminated(qu).map( (ke:KeyEvent) =>  TypedChar(ke.getCharacter))
   }
 
-  private def updateValue[F[_]: Async, A](value: WritableValue[A]): Pipe[F, A, Unit] = for {
+  private def updateValue[IO[_]: Async, A](value: WritableValue[A]): Pipe[IO, A, Unit] = for {
     a <- _
     _ <- Stream.eval(updateUi(value setValue a))
   } yield ()
 
-  private def updateUi[F[_]: Async, A](action: => A): F[A] =
-    Async[F].async[A] { cb =>
+  private def updateUi[A](action: => A): IO[A] =
+    Async[IO].async[A] { cb =>
       Platform.runLater { () =>
         cb(Try(action).toEither)
       }
+      IO(Some(IO(())))
     }
 }
