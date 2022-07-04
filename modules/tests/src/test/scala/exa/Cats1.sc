@@ -1,5 +1,4 @@
 import cats.Id
-import cats.conversions.all.autoWidenFunctor
 import cats.data.{Writer, WriterT}
 import cats.syntax.all._
 import cats.effect._

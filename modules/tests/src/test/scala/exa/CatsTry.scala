@@ -1,5 +1,7 @@
 package exa
 
+import cats.Eval
+
 object CatsTry {
 
 
@@ -11,5 +13,16 @@ object CatsTry {
     println(s"fact $n $ans")
     ans
   }
+
+
+  def factorial(n: BigInt): Eval[BigInt] =
+    if(n == 1) {
+      Eval.now(n)
+    } else {
+      factorial(n - 1).map(_ * n)
+    }
+
+
+
 
 }
