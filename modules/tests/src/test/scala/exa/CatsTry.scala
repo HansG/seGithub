@@ -38,9 +38,18 @@ object CatsTry extends App{
         factorial(n - 1).map(_ * n)
       }
 
-    type Logged[A] = WriterT[Id, Vector[String], A]
+    type Logged[A] = Writer[Vector[String], A]
 
-    val writer1: WriterT[Id, Vector[String], Int] = for {
+
+    def factorialM(n: Int): Writer[ String , Int] = slowly(
+      if(n == 0)  1.writer("fact 0 = 1")
+      else
+        factorialM(n - 1).map(f => n*f).mapBoth( (log, f) => (log + (s"\nfact ${n} = $f"), f))
+    )
+
+
+
+    val writer1: Logged[Int] = for {
       a <- 10.pure[Logged]
       _ <- Vector("a", "b", "c").tell
       b <- 32.writer(Vector("x", "y", "z"))
@@ -49,12 +58,15 @@ object CatsTry extends App{
     def factorial1(n: BigInt) : Logged[BigInt] =
       for  {
         ans <- if(n == 0) {
-          BigInt(1).pure[Logged]
-        } else {
-          slowly(factorial1(  n - 1  ).map(_ *  n ))
-        }
+                BigInt(1).pure[Logged]
+              } else {
+                slowly(factorial1(  n - 1  ).map(_ *  n ))
+              }
         _ <- Vector(s"fact $n $ans").tell
       } yield ans
+
+
+    implicit def orderingf[A](implicit ord: Ordering[A]): Ordering[Logged[A]] = Ordering.by(_.value)
 
     val logs = Await.result(Future.sequence(Vector(
       Future(factorial1(50)),
@@ -115,4 +127,31 @@ object CatsTry extends App{
 
 
   }
+
+
+  object StateTry {
+
+    import cats.data.State
+    import State._
+
+    val program: State[Int, (Int, Int, Int)] = for {
+      a <- get[Int]
+      _ <- set[Int](a + 1)
+      b <- get[Int]
+      _ <- modify[Int](_ + 1)
+      c <- inspect[Int, Int](_ * 1000)
+    } yield (a, b, c)
+
+     val (state, result) = program.run(1).value
+
+
+
+
+
+  }
+
+
+
+
+
  }

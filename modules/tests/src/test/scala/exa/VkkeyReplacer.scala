@@ -23,21 +23,7 @@ object VkkeyReplacer extends App {
 
 
 
-  lazy val configUtilText = """                key2EinvEnum.put(ARBEITSVERZEICHNIS_EX_IMPORT, VkEinvEnumIntern.Arbeitsverzeichnis);
-                         |                key2EinvEnum.put(KEY_QJOU_LOG, VkEinvEnumAllgemein.QJouDeaktiviert);
-                         |
-                         |                //key: "EigeneStvaNummer"
-                         |                key2EinvEnum.put(EIGENE_STVA_NUMMER, VkEinvEnumAllgemein.EigeneStvaNummer);
-                         |
-                         |                key2EinvEnum.put(TRANSFERVERZEICHNIS_PRUEFERGEBNISSE, VkEinvEnumPruefschnittstelle.TransferVerzeichnisPruefergebnisse);
-                         |                key2EinvEnum.put(TRANSFERVERZEICHNIS_PRUEFAUFTRAEGE, VkEinvEnumPruefschnittstelle.TransferVerzeichnisPruefauftraege);
-                         |
-                         |                key2EinvEnum.put("vkkba.behoerdenschluessel", VkEinvEnumKbaZugriff.VkKbaBehoerdenschluessel);
-                         |
-                         |                //key: kEinvEnumVorgangsbearbeitung
-                         |                key2EinvEnum.put(VkEinvEnumVorgangsbearbeitung.ZEVIS_AUSGABE_FTSID, VkEinvEnumVorgangsbearbeitung.ZevisAusgabeFtSid);
-                         |
-                         |
+  lazy val configUtilText = """
                          |                //key: vkcock
                          |                key2EinvEnum.put("vkcock.webservice.targetendpoint", VkEinvEnumKbaZugriff.VkcockWebserviceTargetendpoint);
                          |                key2EinvEnum.put("vkcock.webservice.timeout", VkEinvEnumKbaZugriff.VkcockWebserviceTimeout);
