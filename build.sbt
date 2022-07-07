@@ -105,12 +105,22 @@ lazy val core = (project in file("modules/core"))
 addCommandAlias("runLinter", ";scalafixAll --rules OrganizeImports")
 
 
+/*
 (fullClasspath in Test) ++= {
   (updateClassifiers in Test).value
+  .configurations
+  .find(_.configuration.name == Test.name)
+  .get
+  .modules
+  .flatMap(_.artifacts)
+  .collect{case (a, f) if a.classifier == Some("sources") => f}
+}
+*/
+
+fullClasspath  ++= {
+  updateClassifiers.value
     .configurations
-    .find(_.configuration.name == Test.name)
-    .get
-    .modules
+    .flatMap(_.modules)
     .flatMap(_.artifacts)
     .collect{case (a, f) if a.classifier == Some("sources") => f}
 }
