@@ -11,6 +11,10 @@ ThisBuild / scalafixDependencies += Libraries.organizeImports
 resolvers += Resolver.sonatypeRepo("snapshots")
 resolvers += Resolver.mavenCentral
 resolvers += "mvnrepository" at "https://mvnrepository.com/artifact"
+resolvers += "Local Maven Repository" at "file://D:/se/m2/repository"
+//resolvers += "Local Maven Repository" at "file://"+Path.userHome.absolutePath+"/.m2/repository"
+
+
 
 val scalafixCommonSettings = inConfig(IntegrationTest)(scalafixConfigSettings(IntegrationTest))
 lazy val root = (project in file("."))
@@ -105,9 +109,8 @@ lazy val core = (project in file("modules/core"))
 addCommandAlias("runLinter", ";scalafixAll --rules OrganizeImports")
 
 
-/*
-(fullClasspath in Test) ++= {
-  (updateClassifiers in Test).value
+(fullClasspath in Runtime) ++= {
+  (updateClassifiers in Runtime).value
   .configurations
   .find(_.configuration.name == Test.name)
   .get
@@ -115,8 +118,9 @@ addCommandAlias("runLinter", ";scalafixAll --rules OrganizeImports")
   .flatMap(_.artifacts)
   .collect{case (a, f) if a.classifier == Some("sources") => f}
 }
-*/
 
+
+/*
 fullClasspath  ++= {
   updateClassifiers.value
     .configurations
@@ -124,3 +128,4 @@ fullClasspath  ++= {
     .flatMap(_.artifacts)
     .collect{case (a, f) if a.classifier == Some("sources") => f}
 }
+*/
