@@ -1,9 +1,17 @@
 package exa
 
-import cats.data.Reader
+import cats.Foldable.ops.toAllFoldableOps
+import cats.Monad
+import cats.Traverse.ops.toAllTraverseOps
+import cats.conversions.all.autoWidenFunctor
+import cats.data.{OptionT, Reader}
+import cats.implicits.{toFoldableOps, toFunctorOps}
 import com.sun.org.apache.xalan.internal.xsltc.compiler.sym
+import geny.Generator.from
 import natchez.Tags.db
 
+import scala.Option.option2Iterable
+import scala.collection.IterableOnce.iterableOnceExtensionMethods
 import scala.collection.mutable
 import scala.meta.internal.Scaladoc.TagType.See
 
@@ -215,5 +223,54 @@ object CatsTry extends App {
       flatMap(x => branch(leaf(x - 1), leaf(x + 1)))
 
   }
+
+
+  object TailRecTry {
+
+    import cats.syntax.flatMap._ // For flatMap
+    def retry[F[_]: Monad, A](start: A)(f: A => F[A]): F[A] =
+      f(start).flatMap{ a =>
+        retry(a)(f)
+      }
+
+
+    def retryTailRecM[F[_]: Monad, A](start: A)(f: A => F[A]): F[A] =
+      Monad[F].tailRecM(start){ a =>
+        f(a).map(a2 => Left(a2))
+      }
+
+    import cats.syntax.monad._ // for iterateWhileM
+    def retryM[F[_]: Monad, A](start: A)(f: A => F[A]): F[A] =
+      start.iterateWhileM(f)(a => true)
+
+
+    import cats.syntax.applicative._ // for pure
+    // Hypothetical example. This won't actually compile:
+    def withInOpt[M[_]: Monad ] = {
+      type Composed[A] = M[Option[A]]
+      new Monad[Composed] {
+        override def pure[A](a: A): Composed[A] = a.pure[Option].pure[M]
+        override def flatMap[A, B](fa: Composed[A])(f: A => Composed[B]): Composed[B] =
+              Monad[M].flatMap(fa)((opt:Option[A]) =>  opt.map(f).getOrElse(None.pure[M]))
+
+        override def tailRecM[A, B](a: A)(f: A => Composed[Either[A, B]]): Composed[B] = ???
+      }
+    }
+    //funktioniert nicht !!!!  def withOutOpt[M[_]: Monad ] = ???
+    //type ListOption[A] = List[Option[A]]
+   // implicit  val lm: Monad[ListOption] = withInOpt[List]
+    import cats.instances.list._ // for Monad
+    type ListOption[A] =  OptionT[List, A]
+    val result1: ListOption[Int] = OptionT(List(Option(10)))
+    // result1: ListOption[Int] = OptionT(List(Some(10)))
+    val result2: ListOption[Int] = 32.pure[ListOption]
+
+    val i3 = result1.flatMap( i => result2.map(i2 => i2 + i) )
+
+
+
+  }
+
+
 
 }
