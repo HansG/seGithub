@@ -54,4 +54,4 @@ val futureEitherOr: FutureEitherOption[Int] =
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-await(futureEitherOr , 10 seconds)
+val feo =  futureEitherOr.value
