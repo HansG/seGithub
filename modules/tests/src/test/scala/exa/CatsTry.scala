@@ -268,6 +268,28 @@ object CatsTry extends App {
     val i3 = result1.flatMap( i => result2.map(i2 => i2 + i) )
 
 
+    type ErrorOr[A] = Either[String, A]
+    type ErrorOrOption[A] = OptionT[ErrorOr, A]
+
+    import cats.instances.either._ // for Monad
+    val a = 10.pure[ErrorOrOption]
+    // a: ErrorOrOption[Int] = OptionT(Right(Some(10)))
+    val b = 32.pure[ErrorOrOption]
+    val c = a.flatMap(x => b.map(y => x + y))
+
+
+    import scala.concurrent.Future
+    import cats.data.{EitherT, OptionT}
+    type FutureEither[A] = EitherT[Future, String, A]
+    type FutureEitherOption[A] = OptionT[FutureEither, A]
+
+    val futureEitherOr: FutureEitherOption[Int] =
+      for {
+        a <- 10.pure[FutureEitherOption]
+        b <- 32.pure[FutureEitherOption]
+      } yield a + b
+
+
 
   }
 
