@@ -1,5 +1,8 @@
 import cats.Invariant.catsApplicativeForArrow
-import cats.syntax.either._ // for catchOnly
+import cats.syntax.either._
+
+import scala.::
+import scala.collection.immutable.:: // for catchOnly
 
 
 def parseInt(str: String): Either[String, Int] =
@@ -116,6 +119,7 @@ object optionToList extends FunctionK[Option, List] {
 }
 val otl = optionToList(Some(1))
 optionToList(None)
+
 
 
 
