@@ -105,8 +105,10 @@ def validate(inputs: List[Int]): ErrorsOr[List[Int]] =
 validate(List(2, 4, 6))
 validate(List(2, 3, 4, 5, 6))
 
-Applicative[ErrorsOr].map2(Valid(List(2,4)), Invalid(List("3 not even"))(_ :+ _)
+Applicative[ErrorsOr].map2(Valid(List(2,4)), Valid(3))(_ :+ _)
+Applicative[ErrorsOr].map2(Valid(List(2,4)), Invalid(List("3 not even")))(_ :+ _)
 
+Applicative[Vector].map2(Vector(1, 2), Vector(3, 4))( (_, _) )
 
 
 
