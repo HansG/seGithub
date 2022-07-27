@@ -1,3 +1,5 @@
+import cats.Monoid
+
 import scala.:+
 
 val l123 = List(1, 2, 3)
@@ -110,7 +112,18 @@ Applicative[ErrorsOr].map2(Valid(List(2,4)), Invalid(List("3 not even")))(_ :+ _
 
 Applicative[Vector].map2(Vector(1, 2), Vector(3, 4))( (_, _) )
 
+//import cats.instances.int._  for Monoid
+Foldable[Vector].foldMap(Vector(1, 2, 3))(identity)
+Foldable[Vector].foldMap("Hello world!".toVector)(_.toString.toUpperCase)
 
+import cats.instances.list._ // for Traverse
+import cats.syntax.traverse._ // for sequence
+def parallelFoldMap[A, B : Monoid](values: Vector[A])(func: A => B): Future[B] =  values.grouped(3).toList.map( v => Future(Foldable[Vector].foldMap(v)(func))).sequence.map(lb => lb.foldMap(identity ))
 
-
+val result: Future[Int] =
+  parallelFoldMap((1 to 100000).toVector)(identity)
+val gsum = Await.result(result, 1.second)
+val gv = (1 to 100000).toVector
+gv.grouped(3)
+res26.toList
 
