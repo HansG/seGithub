@@ -110,7 +110,16 @@ validate(List(2, 3, 4, 5, 6))
 Applicative[ErrorsOr].map2(Valid(List(2,4)), Valid(3))(_ :+ _)
 Applicative[ErrorsOr].map2(Valid(List(2,4)), Invalid(List("3 not even")))(_ :+ _)
 
+def amap2(a : ErrorsOr[List[Int]], b : ErrorsOr[Int]) = Applicative[ErrorsOr].map2(a,b)(_ :+ _)
+amap2(Invalid(List("1 not even", "5 not even")), Invalid(List("3 not even")))
+
+def amap2p(a : ErrorsOr[Int], b : ErrorsOr[Int]) = Applicative[ErrorsOr].map2(a,b)(_ + _)
+amap2p(Valid(4), Valid(3))
+amap2p(Invalid(List("1 not even", "5 not even")), Invalid(List("3 not even")))
+
 Applicative[Vector].map2(Vector(1, 2), Vector(3, 4))( (_, _) )
+Applicative[ErrorsOr].map2[List[Int], Int, List[Int]](Invalid(List("1 not even", "5 not even")), Invalid(List("3 not even")))(_ :+ _)
+
 
 //import cats.instances.int._  for Monoid
 Foldable[Vector].foldMap(Vector(1, 2, 3))(identity)
@@ -118,12 +127,27 @@ Foldable[Vector].foldMap("Hello world!".toVector)(_.toString.toUpperCase)
 
 import cats.instances.list._ // for Traverse
 import cats.syntax.traverse._ // for sequence
-def parallelFoldMap[A, B : Monoid](values: Vector[A])(func: A => B): Future[B] =  values.grouped(3).toList.map( v => Future(Foldable[Vector].foldMap(v)(func))).sequence.map(lb => lb.foldMap(identity ))
+def parallelFoldMap[A, B : Monoid](values: Vector[A])(func: A => B): Future[B] =
+  values.grouped(values.size / 8).toList.map( v => Future(Foldable[Vector].foldMap(v)(func))).
+    sequence.map(lb => lb.foldMap(identity ))
 
 val result: Future[Int] =
   parallelFoldMap((1 to 100000).toVector)(identity)
 val gsum = Await.result(result, 1.second)
-val gv = (1 to 100000).toVector
-gv.grouped(3)
-res26.toList
 
+Foldable[Vector].foldMap((1 to 100).toVector)(identity)
+(1 to 100).toList.foldMap(identity)
+
+def parallelFoldMap1[A, B: Monoid](values: Vector[A])
+(func: A => B): Future[B] = {
+  val numCores = Runtime.getRuntime.availableProcessors
+  val groupSize = (1.0 * values.size / numCores).ceil.toInt
+  values
+    .grouped(groupSize)
+    .toVector
+    .traverse(group => Future(group.toVector.foldMap(func)))
+    .map(_.combineAll)
+}
+val future1: Future[Int] =
+  parallelFoldMap((1 to 100000).toVector)(identity)
+Await.result(future1, 1.second)
