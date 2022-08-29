@@ -153,6 +153,18 @@ object MainX extends IOApp.Simple {
 
     }
 
+
+  def tuevsServer : IO[Unit] =
+    ConfigX.dcfg.flatTap { cfg =>
+      Logger[IO].info(s"Loaded config $cfg")
+    }.flatMap { cfg =>
+      val brandRoutes = BrandRoutes[IO](dataBrands1).routes
+      (cfg, brandRoutes)
+      val brandApp = loggers(Router(version.v1 -> myRoutes ).orNotFound)
+    }
+
+
+
 //2022XX
    def runFst: IO[Unit] =
     ConfigX.dcfg.flatMap { cfg =>
@@ -160,9 +172,8 @@ object MainX extends IOApp.Simple {
         MkHttpClient[IO]
           .newEmber(cfg.httpClientConfig)
           .map { client =>   //wird hier nicht verwendet .... newEmber nur wegen lift zu Ressource
-            val brandRoutes =
-              BrandRoutes[IO](dataBrands1).routes
-            //  val brandRoutes = BrandRoutes[IO](failingBrands(List(Brand(BrandId(UUID.randomUUID()), BrandName("brand1"))))).routes
+             //  val brandRoutes = BrandRoutes[IO](failingBrands(List(Brand(BrandId(UUID.randomUUID()), BrandName("brand1"))))).routes
+            val brandRoutes = BrandRoutes[IO](dataBrands1).routes
             val adminRoutes   = AdminBrandRoutesX[IO](dataBrands1).routes
 
             val myRoutes = brandRoutes  <+> adminRoutes
