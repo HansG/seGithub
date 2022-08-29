@@ -1,4 +1,7 @@
-import cats.Monoid
+import cats.{Monoid, NonEmptyParallel}
+import cats.effect.IO
+import cats.effect.unsafe.implicits.global
+import cats.implicits.toTraverseOps
 
 import scala.:+
 
@@ -55,6 +58,9 @@ import scala.concurrent.ExecutionContext.Implicits.global
 def getUptime(hostname: String): Future[Int] =
   Future(hostname.length * 60)
 
+def getUptimei(hostname: String): IO[Int] =
+  IO(hostname.length * 60)
+
 val allUptimes: Future[List[Int]] =
   hostnames.foldLeft(Future(List.empty[Int])) {
     (accum, host) =>
@@ -68,23 +74,26 @@ val allUptimes: Future[List[Int]] =
 val allUptimes1: Future[List[Int]] =
   Future.traverse(hostnames)(getUptime)
 
+val allUptimes1i: IO[List[Int]] =
+   hostnames.traverse(getUptimei)
+
 import scala.concurrent.duration._
 Await.result(allUptimes, 1.second)
+import cats.effect.unsafe.implicits.global
+val allup = allUptimes1i.unsafeRunTimed(1.second)
 
 import cats.Applicative
 import cats.syntax.applicative._
 import cats.syntax.apply._ // for mapN
-def listTraverse[F[_]: Applicative, A, B]
-(list: List[A])(func: A => F[B]): F[List[B]] =
+
+def listTraverse[F[_]: Applicative, A, B](list: List[A])(func: A => F[B]): F[List[B]] =
   list.foldLeft(List.empty[B].pure[F]) { (accum, item) =>
     (accum, func(item)).mapN(_ :+ _)
   }
 
-val totalUptime = listTraverse(hostnames)(getUptime)
+val totalUptime = listTraverse(hostnames)(getUptimei)
 
-def listSequence[F[_]: Applicative, B]
-(list: List[F[B]]): F[List[B]] =
-  listTraverse(list)(identity)
+def listSequence[F[_]: Applicative, B](list: List[F[B]]): F[List[B]] = listTraverse(list)(identity)
 
 listSequence(List(Vector(1, 2), Vector(3, 4)))
 
@@ -92,6 +101,15 @@ listSequence(List(Vector(1, 2), Vector(3, 4)))
 
 import cats.implicits.catsSyntaxTuple2Parallel
 (Vector(1, 2), Vector(3, 4)).parMapN(_ + _)
+(Vector(1), Vector(3, 4)).parMapN(_ + _)
+
+def listTraversePar[F[_]: Applicative : NonEmptyParallel, A, B](list: List[A])(func: A => F[B]): F[List[B]] =
+  list.foldLeft(List.empty[B].pure[F]) { (accum, item) =>
+    (accum, func(item)).parMapN(_ :+ _)
+  }
+def listSequencePar[F[_]: Applicative : NonEmptyParallel, B](list: List[F[B]]): F[List[B]] = listTraversePar(list)(identity)
+listSequencePar(List(Vector(1, 2), Vector(3, 4), Vector(5, 6)))
+
 
 import cats.data.Validated
 type ErrorsOr[A] = Validated[List[String], A]
