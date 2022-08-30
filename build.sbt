@@ -101,8 +101,16 @@ lazy val core = (project in file("modules/core"))
       Libraries.skunkCirce,
       Libraries.squants,
      // "com.lihaoyi" %% "ammonite" % "2.5.3" cross CrossVersion.full
-      "com.lihaoyi" %% "ammonite" % "2.5.4" cross CrossVersion.full
-    ),
+      "com.lihaoyi" %% "ammonite" % "2.5.4" cross CrossVersion.full,
+    Libraries.catsLaws,
+    Libraries.log4catsNoOp,
+    Libraries.monocleLaw,
+    Libraries.refinedScalacheck,
+    Libraries.weaverCats,
+    Libraries.weaverDiscipline,
+    Libraries.logback % Runtime,
+    Libraries.weaverScalaCheck
+  ),
     libraryDependencies ++= javaFXModules.map(m => "org.openjfx" % s"javafx-$m" % "11" classifier "win")
   )
 

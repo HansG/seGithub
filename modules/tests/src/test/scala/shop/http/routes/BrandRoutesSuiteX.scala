@@ -3,6 +3,7 @@ package shop.http.routes
 import cats.effect._
 import cats.syntax.all._
 import ciris.env
+import com.comcast.ip4s.IpLiteralSyntax
 import com.comcast.ip4s.Literals.port
 import eu.timepit.refined.types.string.NonEmptyString
 import io.circe.syntax.EncoderOps
@@ -123,7 +124,8 @@ object MainX extends IOApp.Simple {
     }
   }
 
-  override def run: IO[Unit] = runFst
+  override def run: IO[Unit] = runTestS
+ // override def run: IO[Unit] = runFst
 
    def runScd: IO[Unit] =
     ConfigX.dcfg.flatMap { cfg =>
@@ -153,14 +155,23 @@ object MainX extends IOApp.Simple {
 
     }
 
+  val httpsc = HttpServerConfig(
+    host = host"127.0.0.1",
+    port = port"8080"
+  )
 
-  def tuevsServer : IO[Unit] =
-    ConfigX.dcfg.flatTap { cfg =>
+  def runTestS   =
+    IO(httpsc).flatTap { cfg =>
       Logger[IO].info(s"Loaded config $cfg")
-    }.flatMap { cfg =>
-      val brandRoutes = BrandRoutes[IO](dataBrands1).routes
-      (cfg, brandRoutes)
+    }.map {  cfg  =>
+      val myRoutes = BrandRoutes[IO](dataBrands1).routes
       val brandApp = loggers(Router(version.v1 -> myRoutes ).orNotFound)
+
+      (cfg, brandApp)
+    }.flatMap {
+      case (cfg, httpApp) =>
+        val server = MkHttpServer[IO].newEmber(cfg, httpApp)
+        server.useForever
     }
 
 
