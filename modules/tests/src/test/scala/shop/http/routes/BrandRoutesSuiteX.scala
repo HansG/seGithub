@@ -33,7 +33,7 @@ import shop.domain.order.{PaymentError, PaymentId}
 import shop.domain.payment.Payment
 import shop.generators._
 import shop.http.clients.PaymentClient
-import shop.http.routes.ServiceTry$.{dataBrands, dataBrands1}
+import shop.http.routes.BrandRoutesSuiteX.{dataBrands, dataBrands1}
 import shop.http.routes.admin.AdminBrandRoutesX
 import shop.modules.HttpClients
 import shop.resources.{MkHttpClient, MkHttpServer}
@@ -53,7 +53,7 @@ object AppX extends  IOApp {
 }
 
 
-object ServiceTry$ extends HttpSuite {
+object BrandRoutesSuiteX extends HttpSuite{
   val bg = Gen.listOf(brandGen)
   val params: Gen.Parameters = Gen.Parameters.default.withSize(10)
 
@@ -63,18 +63,18 @@ object ServiceTry$ extends HttpSuite {
         Gen.buildableOfN[List[Brand], Brand](n, brandGen)
       }
 
-  def dataBrands1 : ServiceTry = new ServiceTry {
+  def dataBrands1 : TestBrandsX = new TestBrandsX {
     override def findAll: IO[List[Brand]] =
       //IO.pure(bg.pureApply(params, Seed.random(),5))
       IO.pure(nonEmptyBList.pureApply(params, Seed.random(),2))
   }
 
-  def dataBrands(brands: List[Brand]) : ServiceTry = new ServiceTry {
+  def dataBrands(brands: List[Brand]) : TestBrandsX = new TestBrandsX {
     override def findAll: IO[List[Brand]] =
       IO.pure(brands)
   }
 
-  def failingBrands(brands: List[Brand]) : ServiceTry = new ServiceTry {
+  def failingBrands(brands: List[Brand]) : TestBrandsX = new TestBrandsX {
     override def findAll: IO[List[Brand]] =
       IO.raiseError(DummyError) *> IO.pure(brands)
   }
@@ -108,7 +108,7 @@ object ServiceTry$ extends HttpSuite {
 
 
 object StartExX extends IOApp {
-  override def run(args: List[String]): IO[ExitCode] = ServiceTry$.run(List("a", "b")) { (to:TestOutcome) =>
+  override def run(args: List[String]): IO[ExitCode] = BrandRoutesSuiteX.run(List("a", "b")) { (to:TestOutcome) =>
     IO(println(to))
   }.as[ExitCode](ExitCode.Success)
 }
@@ -137,7 +137,7 @@ object MainX extends IOApp.Simple {
               BrandRoutes[IO](dataBrands1).routes
             //  val brandRoutes = BrandRoutes[IO](failingBrands(List(Brand(BrandId(UUID.randomUUID()), BrandName("brand1"))))).routes
             val brandApp = loggers(Router(version.v1 -> brandRoutes).orNotFound)
-            val clientb  = HttpClient.make(cfg.paymentConfig, client)
+            val clientb  = BrandClientX.make(cfg.paymentConfig, client)
 
             (clientb, cfg.httpServerConfig -> brandApp)
           }
@@ -208,12 +208,12 @@ object MainY extends IOApp.Simple {
 
   override def run: IO[Unit] = runClient
 
-  def useClient(cl : HttpClient) = cl.process.flatMap{ li => IO.println(li)}
+  def useClient(cl : BrandClientX) = cl.process.flatMap{  li => IO.println(li)}
 
-  def useClientA(cl : HttpClient, bn : BrandName) =
+  def useClientA(cl : BrandClientX, bn : BrandName) =
     cl.processX(bn).flatMap{  li => IO.println(li )}
 
-  def useClient1(cl : HttpClient) =
+  def useClient1(cl : BrandClientX) =
     fs2.Stream.fixedRate[IO](FiniteDuration(1, TimeUnit.SECONDS)).take(10).evalMap(_ => useClient(cl)).compile.drain
 
 
@@ -221,7 +221,7 @@ object MainY extends IOApp.Simple {
     Logger[IO].info(s"Loaded config $cfg") >>
       MkHttpClient[IO]
         .newEmber(cfg.httpClientConfig)
-        .map { client =>  HttpClient.make(cfg.paymentConfig, client)  }
+        .map { client =>  BrandClientX.make(cfg.paymentConfig, client)  }
         .use { cl =>
           useClientA(cl, BrandName("Sepp"))
           // useClient(cl)
@@ -244,8 +244,8 @@ trait BrandClientX {
 }
 
 object BrandClientX {
-  def make( cfg: PaymentConfig, client: Client[IO] ): HttpClient =
-    new HttpClient with Http4sClientDsl[IO] {
+  def make( cfg: PaymentConfig, client: Client[IO] ): BrandClientX =
+    new BrandClientX with Http4sClientDsl[IO] {
       def process: IO[List[Brand]] =
         Uri.fromString(cfg.uri.value + "/v1/brands").liftTo[IO].flatMap { uri =>
           client.run(GET(uri)).use { resp =>
