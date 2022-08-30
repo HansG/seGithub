@@ -137,16 +137,15 @@ object generators extends App {
     go(0, "")
   }
 
-
   lazy val cardGen: Gen[Card] =
     for {
       n <- cardNameGen
-      u <- sized(16).map(x => CardNumber(Refined.unsafeApply(x)) )
+      u <- sized(16).map(x => CardNumber(Refined.unsafeApply(x)))
       //u <- sized(16).map(x =>   CardNumber.from(x))//XX liefert Either -> MonadTransformer für Gen, Either...
       e <- sized(4).map(x => CardExpiration(Refined.unsafeApply(x.toString))) //.from(x.toString))
       c <- sized(3).map(x => CardCVV(Refined.unsafeApply(x.toInt)))
-    } yield    Card(n, u, e, c)
-   // } yield  Parallel.parMap4(na, nu, e, c)((na, nu, e, c) => Card(CardName(na), CardNumber(nu), CardExpiration(e), CardCVV(c)))
+    } yield Card(n, u, e, c)
+  // } yield  Parallel.parMap4(na, nu, e, c)((na, nu, e, c) => Card(CardName(na), CardNumber(nu), CardExpiration(e), CardCVV(c)))
 
   // http routes generators
 
@@ -171,7 +170,6 @@ object generators extends App {
 
   lazy val brandParamGen: Gen[BrandParam] =
     arbitrary[NonEmptyString].map(BrandParam(_))
-
 
   //2022XX
   lazy val createItemParamGen: Gen[CreateItemParam] =
