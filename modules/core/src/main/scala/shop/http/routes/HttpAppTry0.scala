@@ -40,7 +40,7 @@ import org.http4s.ember.client.EmberClientBuilder
 import org.http4s.ember.server.EmberServerBuilder
 import org.http4s.server.{Router, Server}
 import org.http4s.server.defaults.Banner
-import shop.http.routes.MainX.ServerConfig
+import shop.http.routes.StartServer.ServerConfig
 import upickle.default
 
 
@@ -66,8 +66,6 @@ object ProdId {
 case class ProdName(value: String) {
   def toProd(prodId: ProdId): Prod =
     Prod(prodId, this)
-
-  def toString1: String = { "ProdName:" + value }
 }
 
 @derive(decoder, encoder, eqv, show)
@@ -80,19 +78,19 @@ trait Service[F[_]] {
 }
 
 
-class ServiceTry extends Service[IO] {
+class AServiceImpl extends Service[IO] {
   implicit val logger                       = Slf4jLogger.getLogger[IO]
   def findAll: IO[List[Prod]]              = IO.pure(List.empty)
   def create1(name: ProdName): IO[ProdId] = make[IO, ProdId]
   def create(name: ProdName): IO[ProdId] =
-    Logger[IO].info(s"@server: name.toString= ${name.toString1}") >>
+    Logger[IO].info(s"@server: name= ${name}") >>
       make[IO, ProdId].flatTap(bi => IO(println(s"@server: ProdId=${bi.asJson.spaces2SortKeys}")))
 }
 
 
 
 
-object  ServiceTry {
+object  AServiceImpl {
   lazy val prodIdGen: Gen[ProdId] =  Gen.uuid.map(ProdId(_))
 
   lazy val prodNameGen : Gen[ProdName] = Gen.alphaStr.map(ProdName(_))
@@ -114,35 +112,33 @@ object  ServiceTry {
         Gen.buildableOfN[List[Prod], Prod](n, prodGen)
       }
 
-  def dataProds1: ServiceTry = new ServiceTry {
+  def genServiceImpl: AServiceImpl = new AServiceImpl {
     override def findAll: IO[List[Prod]] =
       IO.pure(nonEmptyPList.pureApply(params, Seed.random(), 2))
   }
 }
 
-object MainX extends IOApp.Simple {
+@newtype case class CUri(value: NonEmptyString)
 
-  override def run: IO[Unit] = runTestS
+case class ServerConfig( host: Host, port: Port ) {
+  val uri = CUri(s"http://$host:$port")
+}
+
+
+object StartServer extends IOApp.Simple {
+
+  override def run: IO[Unit] = start
   // override def run: IO[Unit] = runFst
 
 
   implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
-  val loggers: HttpApp[IO] => HttpApp[IO] = {
-    { http: HttpApp[IO] =>
-      RequestLogger.httpApp(true, true)(http)
-    } andThen { http: HttpApp[IO] =>
-      ResponseLogger.httpApp(true, true)(http)
-    }
+  def addLoggers(http: HttpApp[IO] ): HttpApp[IO] = {
+      val httpReq = RequestLogger.httpApp(true, true)(http)
+      ResponseLogger.httpApp(true, true)(httpReq)
   }
 
-  case class ServerConfig( host: Host, port: Port )
 
-  val httpsc = ServerConfig(
-    host = host"127.0.0.1",
-    port = port"8080"
-  )
-
-  final case class ProdRoutes[F[_]: Monad]( service: Service[F] ) extends Http4sDsl[F] {
+  final case class RouteToService[F[_]: Monad](service: Service[F] ) extends Http4sDsl[F] {
     private[routes] val prefixPath = "/prods"
 
     private val httpRoutes: HttpRoutes[F] = HttpRoutes.of[F] {
@@ -154,8 +150,12 @@ object MainX extends IOApp.Simple {
     )
   }
 
+  val serverConfig = ServerConfig(
+    host = host"127.0.0.1",
+    port = port"8080"
+  )
 
-  def newEmber[F[_] : Async](cfg : ServerConfig, httpApp : HttpApp[F]) = EmberServerBuilder
+  def newServer[F[_] : Async](cfg : ServerConfig, httpApp : HttpApp[F]) = EmberServerBuilder
     .default[F]
     .withHost(cfg.host)
     .withPort(cfg.port)
@@ -163,10 +163,10 @@ object MainX extends IOApp.Simple {
     .build
 
 
-  def runTestS = {
-    val myRoutes = ProdRoutes[IO](ServiceTry.dataProds1).routes
-    val prodApp = loggers(Router(version.v1 -> myRoutes).orNotFound)
-    val server =  newEmber[IO](httpsc, prodApp)
+  def start = {
+    val routeS = RouteToService[IO](AServiceImpl.genServiceImpl).routes
+    val httpApp = addLoggers(Router(version.v1 -> routeS).orNotFound)
+    val server =  newServer[IO](serverConfig, httpApp)
     server.useForever
   }
 
@@ -174,20 +174,73 @@ object MainX extends IOApp.Simple {
 
 //Client ------------------------------------------------------
 
-@newtype case class CliUri(value: NonEmptyString)
-@newtype case class CliConfig(uri: CliUri)
+case class  ClientConfig(timeout: FiniteDuration, idleTimeInPool: FiniteDuration )
+
+object StartClient extends IOApp.Simple {
+  import StartServer.logger
+
+  import eu.timepit.refined.auto._
+  val clientC =  ClientConfig(
+    timeout = 60.seconds,
+    idleTimeInPool = 30.seconds,
+   )
+
+  def newClient[F[_]:Async](c: ClientConfig): Resource[F, Client[F]] =
+    EmberClientBuilder
+      .default[F]
+      .withTimeout(c.timeout)
+      .withIdleTimeInPool(c.idleTimeInPool)
+      .build
 
 
-trait HttpClient {
-  def process: IO[List[Prod]]
-  def processX(prodP: ProdName): IO[Prod]
+  def runClient = IO(clientC).flatMap { cfg =>
+    Logger[IO].info(s"Loaded config $cfg") >>
+      newClient[IO](cfg)
+        .map { client =>
+          ClientApp.newApp(uri, client)
+        }
+        .use { cl =>
+          useClientA(cl, ProdName("Sepp"))
+          // useClient(cl)
+        }
+  }
+
+
+  override def run: IO[Unit] = runClient
+
+  def useClient(cl: ClientApp) = cl.apply1.flatMap { li =>
+    IO.println(li)
+  }
+
+  def useClientA(cl: ClientApp, bn: ProdName) =
+    cl.apply2(bn).flatMap { li =>
+      IO.println(li)
+    }
+
+  def useClient1(cl: ClientApp) =
+    fs2.Stream.fixedRate[IO](FiniteDuration(1, TimeUnit.SECONDS)).take(10).evalMap(_ => useClient(cl)).compile.drain
+
+
+
 }
 
-object HttpClient {
-  def make(cfg: CliConfig, client: Client[IO]): HttpClient =
-    new HttpClient with Http4sClientDsl[IO] {
-      def process: IO[List[Prod]] =
-        Uri.fromString(cfg.uri.value + "/v1/prods").liftTo[IO].flatMap { uri =>
+
+
+
+
+
+
+
+trait ClientApp {
+  def apply1: IO[List[Prod]]
+  def apply2(prodP: ProdName): IO[Prod]
+}
+
+object ClientApp {
+  def newApp(uri: CUri, client: Client[IO]): ClientApp =
+    new ClientApp with Http4sClientDsl[IO] {
+      def apply1: IO[List[Prod]] =
+        Uri.fromString(uri.value + "/v1/prods").liftTo[IO].flatMap { uri =>
           client.run(GET(uri)).use { resp =>
             resp.status match {
               case Status.Ok | Status.Conflict =>
@@ -200,8 +253,8 @@ object HttpClient {
           }
         }
 
-      def processX(prodP: ProdName): IO[Prod] =
-        Uri.fromString(cfg.uri.value + "/v1").liftTo[IO].flatMap { uri =>
+      def apply2(prodP: ProdName): IO[Prod] =
+        Uri.fromString(uri.value + "/v1").liftTo[IO].flatMap { uri =>
           client.run(POST(prodP, uri / "prodsX")).use { resp =>
             resp.status match {
               case Status.Created | Status.Conflict =>
@@ -216,58 +269,4 @@ object HttpClient {
     }
 }
 
-object MainY extends IOApp.Simple {
-  import MainX.logger
 
-  override def run: IO[Unit] = runClient
-
-  def useClient(cl: HttpClient) = cl.process.flatMap { li =>
-    IO.println(li)
-  }
-
-  def useClientA(cl: HttpClient, bn: ProdName) =
-    cl.processX(bn).flatMap { li =>
-      IO.println(li)
-    }
-
-  def useClient1(cl: HttpClient) =
-    fs2.Stream.fixedRate[IO](FiniteDuration(1, TimeUnit.SECONDS)).take(10).evalMap(_ => useClient(cl)).compile.drain
-
-
-  case class  ClientConfig(timeout: FiniteDuration, idleTimeInPool: FiniteDuration)
-
-
-  case class AppConfigX(httpClientConfig:  ClientConfig, paymentConfig :CliConfig, httpServerConfig:  ServerConfig)
-  import eu.timepit.refined.auto._
-  val clientC =  AppConfigX(
-     ClientConfig(
-      timeout = 60.seconds,
-      idleTimeInPool = 30.seconds
-    ),
-    CliConfig(CliUri("http://localhost:8080")),
-     ServerConfig(
-      host = host"127.0.0.1",
-      port = port"8080"
-    )
-  )
-
-  def newEmber[F[_]:Async](c: ClientConfig): Resource[F, Client[F]] =
-    EmberClientBuilder
-      .default[F]
-      .withTimeout(c.timeout)
-      .withIdleTimeInPool(c.idleTimeInPool)
-      .build
-
-  def runClient = IO(clientC).flatMap { cfg =>
-    Logger[IO].info(s"Loaded config $cfg") >>
-       newEmber[IO](cfg.httpClientConfig)
-        .map { client =>
-          HttpClient.make(cfg.paymentConfig, client)
-        }
-        .use { cl =>
-          useClientA(cl, ProdName("Sepp"))
-        // useClient(cl)
-        }
-  }
-
-}
