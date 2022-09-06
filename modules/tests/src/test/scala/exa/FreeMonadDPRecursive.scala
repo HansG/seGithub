@@ -68,4 +68,6 @@ object FreeMonadDPRecursive extends App {
     val result: Option[BigInt] = cdRecursive(n).foldMap(interpreter(n))
     println(result)
   }
+
+  execRecursive(6)
 }

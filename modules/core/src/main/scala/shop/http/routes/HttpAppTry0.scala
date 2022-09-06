@@ -48,25 +48,32 @@ object AppX extends IOApp {
     IO(println(""))
   }.as[ExitCode](ExitCode.Success)
 }
-@derive(decoder, encoder, eqv, show) //, uuid
-@newtype
-case class ProdId(value: UUID)
 
-object ProdId {
-  implicit val identityProdId: IsUUID[ProdId] = new IsUUID[ProdId] {
-    val _UUID = Iso[UUID, ProdId](ProdId(_))(_.value)
+object  Model {
+  @derive(decoder, encoder, eqv, show) //, uuid
+  @newtype
+  case class ProdId(value: UUID)
+
+  object ProdId {
+    implicit val identityProdId: IsUUID[ProdId] = new IsUUID[ProdId] {
+      val _UUID = Iso[UUID, ProdId](ProdId(_))(_.value)
+    }
   }
+
+  @derive(decoder, encoder, eqv, show)
+  @newtype
+  case class ProdName(value: String) {
+    def toProd(prodId: ProdId): Prod =
+      Prod(prodId, this)
+  }
+
+  @derive(decoder, encoder, eqv, show)
+  case class Prod(id: ProdId, name: ProdName)
+
+
 }
 
-@derive(decoder, encoder, eqv, show)
-@newtype
-case class ProdName(value: String) {
-  def toProd(prodId: ProdId): Prod =
-    Prod(prodId, this)
-}
-
-@derive(decoder, encoder, eqv, show)
-case class Prod(id: ProdId, name: ProdName)
+import Model._
 
 trait Service[F[_]] {
   def findAll: F[List[Prod]]
@@ -109,11 +116,17 @@ object AServiceImpl {
   }
 }
 
-@newtype case class CUri(value: NonEmptyString)
 
-case class ServerConfig(host: Host, port: Port) {
-  val uri = CUri(s"http://$host:$port")
+object ModelS {
+  @newtype case class CUri(value: NonEmptyString)
+
+  case class ServerConfig(host: Host, port: Port) {
+    val uri = CUri(NonEmptyString.from(s"http://$host:$port").getOrElse("leer"))
+  }
+
 }
+
+import ModelS._
 
 object StartServer extends IOApp.Simple {
 
@@ -186,15 +199,17 @@ object StartClient extends IOApp.Simple {
         ClientApp.newApp(StartServer.serverConfig.uri, client)
       }
       .use { capp =>
-        repeatMonton( capp.apply1, 1, 10)   //, .apply2(ProdName("Sepp"))
+        repeatMonton(capp.apply1, 1, 10L) //, .apply2(ProdName("Sepp"))
       }
-      .flatMap { li => IO.println(li)
-    }
+      .flatMap { li =>
+        IO.println(li)
+      }
   }
 
   override def run: IO[Unit] = runClient
 
- def repeatMonton[A](ioa : IO[A], delay : Int, nmal : Int) =   fs2.Stream.fixedRate[IO](delay.seconds).take(nmal).evalMap(_ => ioa).compile.toList
+  def repeatMonton[A](ioa: IO[A], delay: Int, nmal: Long) =
+    fs2.Stream.fixedRate[IO](delay.seconds).take(nmal).evalMap(_ => ioa).compile.toList
 
 }
 
