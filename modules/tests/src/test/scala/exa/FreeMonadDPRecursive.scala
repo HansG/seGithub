@@ -57,10 +57,10 @@ object FreeMonadDPRecursive extends App {
           case Put(key, value) =>
             // println(s"put($key, $value)")
             arr(key) = value
-            ()
+            value.asInstanceOf[A]
           case Get(key) =>
             // println(s" -- get($key) -- ")
-            Option(arr(key).asInstanceOf[A])
+            arr(key).asInstanceOf[A]
         }
     }
 
@@ -68,6 +68,9 @@ object FreeMonadDPRecursive extends App {
     val result: Option[BigInt] = cdRecursive(n).foldMap(interpreter(n))
     println(result)
   }
+
+
+  execRecursive(5)
 
   execRecursive(6)
 }

@@ -70,9 +70,9 @@ object PostgresSuite extends ResourceSuite {
   test("Items") { postgres =>
     forall(itemGen) { item =>
       def newItem(
-          bid: Option[BrandId],
-          cid: Option[CategoryId]
-      ) = CreateItem(
+                   bid: Option[BrandId],
+                   cid: Option[CategoryId]
+                 ) = CreateItem(
         name = item.name,
         description = item.description,
         price = item.price,
@@ -109,7 +109,7 @@ object PostgresSuite extends ResourceSuite {
           d <- u.create(username, password)
           x <- u.find(username)
           z <- u.create(username, password).attempt
-        } yield expect.all(x.count(_.id === d) === 1, z.isLeft)
+        } yield expect.all(x.count(_.id == d) === 1, z.isLeft)
     }
   }
 
