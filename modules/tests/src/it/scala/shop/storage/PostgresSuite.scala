@@ -51,7 +51,7 @@ object PostgresSuite extends ResourceSuite {
         _ <- b.create(brand.name)
         y <- b.findAll
         z <- b.create(brand.name).attempt
-      } yield expect.all(x.isEmpty, y.count(_.name === brand.name) === 1, z.isLeft)
+      } yield expect.all(x.isEmpty, y.count(_.name == brand.name) === 1, z.isLeft)
     }
   }
 
@@ -63,7 +63,7 @@ object PostgresSuite extends ResourceSuite {
         _ <- c.create(category.name)
         y <- c.findAll
         z <- c.create(category.name).attempt
-      } yield expect.all(x.isEmpty, y.count(_.name === category.name) === 1, z.isLeft)
+      } yield expect.all(x.isEmpty, y.count(_.name == category.name) === 1, z.isLeft)
     }
   }
 
@@ -92,7 +92,7 @@ object PostgresSuite extends ResourceSuite {
         e <- c.findAll.map(_.headOption.map(_.uuid))
         _ <- i.create(newItem(d, e))
         y <- i.findAll
-      } yield expect.all(x.isEmpty, y.count(_.name === item.name) === 1)
+      } yield expect.all(x.isEmpty, y.count(_.name == item.name) === 1)
     }
   }
 

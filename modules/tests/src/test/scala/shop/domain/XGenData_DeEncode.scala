@@ -1,10 +1,10 @@
 package shop.domain
 
 import cats.effect.std.Random
-import cats.effect.{ExitCode, IO, IOApp}
-import cats.{Parallel, Show}
+import cats.effect.{ ExitCode, IO, IOApp }
+import cats.{ Parallel, Show }
 import eu.timepit.refined.api.Refined
-import org.scalacheck.Gen
+import org.scalacheck.{ Arbitrary, Gen }
 import org.scalacheck.rng.Seed
 import shop.domain.XRefinedTypes_Apply._
 import shop.domain.auth.UserId
@@ -12,7 +12,7 @@ import shop.domain.checkout._
 import shop.domain.payment.Payment
 import squants.market.USD
 import weaver.scalacheck.Checkers
-import weaver.{SimpleIOSuite, TestOutcome}
+import weaver.{ SimpleIOSuite, TestOutcome }
 
 import java.util.UUID
 //import eu.timepit.refined.api._
@@ -30,7 +30,7 @@ import $ivy.`com.google.guava:guava:18.0`, com.google.common.collect._
 
  */
 
-object XCheckValueDeEncode   {
+object XCheckValueDeEncode {
 
   //  val cn1 = CardNameP(" nnn") Predicate failed
 
@@ -54,6 +54,27 @@ object XCheckValueDeEncode   {
 
   import org.scalacheck.Gen
   //vgl. shop.generators.nonEmptyStringGen.map(toWord)
+
+  case class ExampleObject(
+      name: String,
+      country: String,
+      itype: String,
+      str: String,
+      amount: Int,
+      number: String,
+      valid: Boolean,
+      str1: String
+  )
+
+  val exampleGen = for {
+    name <- Gen.alphaStr
+    country <- Gen.oneOf(Seq("France", "Germany", "United Kingdom", "Austria"))
+    itype   <- Gen.oneOf(Seq("Communication", "Restaurants", "Parking"))
+    amount  <- Gen.choose(100, 4999)
+    number  <- Gen.choose(1, 10000)
+    valid   <- Arbitrary.arbitrary[Boolean]
+  } yield ExampleObject(name, country, itype, "1/1/2014", amount, number.toString, valid, "")
+
   val stringGen: Gen[String] = Gen.stringOf(Gen.alphaChar)
   lazy val stringGent: Gen[String] = Gen
     .chooseNum(11, 25)
@@ -75,7 +96,7 @@ object XCheckValueDeEncode   {
       c <- sizedNum(3)
     } yield CardFU(n, u, e, c)
 
- // println("Card: " + cardGen.sample)
+  // println("Card: " + cardGen.sample)
   //println( neCardListGen.pureApply(Gen.Parameters.default.withSize(10) ,Seed.random(),2))
 
   lazy val neCardListGen0: Gen[List[Card]] = Gen.listOf(cardGen)
@@ -86,7 +107,6 @@ object XCheckValueDeEncode   {
       Gen.buildableOfN[List[Card], Card](n, cardGen)
     }
   //  Gen.buildableOfN[List[WordPred], WordPred](n, stringGent.map(Refined.unsafeApply(_)))
-
 
   //todo -> 2022XX   arbitrary ... Testserver mit Mockdaten hinschicken/abholen
   //für datenbank (de)serialisieren  client/json (de)serialisieren   eigenes Protokoll mit ODER/UND (de)serialisieren
@@ -167,7 +187,7 @@ object XCheckValueDeEncode   {
 
 object TestApp extends IOApp {
   import XCheckValueDeEncode._
-  def run(args: List[String]):IO[cats.effect.ExitCode] =
+  def run(args: List[String]): IO[cats.effect.ExitCode] =
     PrinterTest(neCardListGen).run
 }
 
@@ -181,9 +201,8 @@ case class PrinterTest[T](gen: Gen[T]) extends SimpleIOSuite with Checkers {
     }
   }
 
-  def run:IO[cats.effect.ExitCode]  = run(List())((to: TestOutcome) => IO(println(to))).as[ExitCode](ExitCode.Success)
+  def run: IO[cats.effect.ExitCode] = run(List())((to: TestOutcome) => IO(println(to))).as[ExitCode](ExitCode.Success)
 }
-
 /*
 
 
