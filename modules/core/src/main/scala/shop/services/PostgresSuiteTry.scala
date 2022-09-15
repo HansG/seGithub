@@ -3,6 +3,7 @@ package shop.services
 import org.scalacheck.Gen
 import shop.domain.brand.{Brand, BrandId, BrandName}
 import cats.effect._
+import cats.implicits.{toFlatMapOps, toFunctorOps}
 import monocle.Iso
 import skunk._
 import skunk.implicits._
@@ -65,7 +66,7 @@ object PostgresSuiteTry extends IOApp {
           postgres.use { session =>
             session.prepare(insertBrand).use { cmd =>
               ID.make[F, BrandIdT].flatMap { id =>
-                cmd.execute(Brand(id, name)).as(id)
+                cmd.execute(BrandT(id, name)).as(id)
               }
             }
           }
