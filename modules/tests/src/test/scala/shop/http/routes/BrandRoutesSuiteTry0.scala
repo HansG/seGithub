@@ -33,8 +33,8 @@ import shop.domain.order.{PaymentError, PaymentId}
 import shop.domain.payment.Payment
 import shop.generators._
 import shop.http.clients.PaymentClient
-import shop.http.routes.BrandRoutesSuiteX.{dataBrands, dataBrands1}
-import shop.http.routes.admin.AdminBrandRoutesX
+import shop.http.routes.BrandRoutesSuiteTry0.{dataBrands, dataBrands1}
+import shop.http.routes.admin.AdminBrandRoutesTry0
 import shop.modules.HttpClients
 import shop.resources.{MkHttpClient, MkHttpServer}
 import shop.services.Brands
@@ -53,7 +53,7 @@ object AppX extends  IOApp {
 }
 
 
-object BrandRoutesSuiteX extends HttpSuite{
+object BrandRoutesSuiteTry0 extends HttpSuite{
   val bg = Gen.listOf(brandGen)
   val params: Gen.Parameters = Gen.Parameters.default.withSize(10)
 
@@ -108,7 +108,7 @@ object BrandRoutesSuiteX extends HttpSuite{
 
 
 object StartExX extends IOApp {
-  override def run(args: List[String]): IO[ExitCode] = BrandRoutesSuiteX.run(List("a", "b")) { (to:TestOutcome) =>
+  override def run(args: List[String]): IO[ExitCode] = BrandRoutesSuiteTry0.run(List("a", "b")) { (to:TestOutcome) =>
     IO(println(to))
   }.as[ExitCode](ExitCode.Success)
 }
@@ -185,7 +185,7 @@ object MainX extends IOApp.Simple {
           .map { client =>   //wird hier nicht verwendet .... newEmber nur wegen lift zu Ressource
              //  val brandRoutes = BrandRoutes[IO](failingBrands(List(Brand(BrandId(UUID.randomUUID()), BrandName("brand1"))))).routes
             val brandRoutes = BrandRoutes[IO](dataBrands1).routes
-            val adminRoutes   = AdminBrandRoutesX[IO](dataBrands1).routes
+            val adminRoutes   = AdminBrandRoutesTry0[IO](dataBrands1).routes
 
             val myRoutes = brandRoutes  <+> adminRoutes
 

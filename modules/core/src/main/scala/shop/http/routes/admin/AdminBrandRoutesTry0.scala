@@ -14,7 +14,7 @@ import shop.ext.http4s.refined._
 import shop.http.auth.users.AdminUser
 import shop.services.Brands
 
-final case class AdminBrandRoutesX[F[_]: JsonDecoder: MonadThrow](
+final case class AdminBrandRoutesTry0[F[_]: JsonDecoder: MonadThrow](
     brands: Brands[F]
 ) extends Http4sDsl[F] {
 

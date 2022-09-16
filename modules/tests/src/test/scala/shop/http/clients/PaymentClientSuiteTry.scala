@@ -13,7 +13,7 @@ import shop.generators._
 import weaver.SimpleIOSuite
 import weaver.scalacheck.Checkers
 
-object PaymentClientSuiteX extends SimpleIOSuite with Checkers {
+object PaymentClientSuiteTry extends SimpleIOSuite with Checkers {
 
   val config = PaymentConfig(PaymentURI("http://localhost"))
 

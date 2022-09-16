@@ -19,7 +19,7 @@ import org.http4s.server.AuthMiddleware
 import org.http4s.syntax.literals._
 import suite.HttpSuite
 
-object AdminRoutesSuiteX extends HttpSuite {
+object AdminRoutesSuiteTry0 extends HttpSuite {
 
   def authMiddleware(authUser: AdminUser): AuthMiddleware[IO, AdminUser] =
     AuthMiddleware(Kleisli.pure(authUser))
@@ -35,7 +35,7 @@ object AdminRoutesSuiteX extends HttpSuite {
     forall(gen) {
       case (id,   brand) =>
         val req      = POST(brand, uri"/brandsX")
-        val routes   = AdminBrandRoutesX[IO](new TestBrands(id)).routes
+        val routes   = AdminBrandRoutesTry0[IO](new TestBrands(id)).routes
         val expected = JsonObject.singleton("brand_id", id.asJson).asJson
         expectHttpBodyAndStatus(routes, req)(expected, Status.Created)
     }

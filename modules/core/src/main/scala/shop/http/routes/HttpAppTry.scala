@@ -44,32 +44,40 @@ import org.http4s.server.{Router, Server}
 import org.http4s.server.defaults.Banner
 import upickle.default
 import eu.timepit.refined.auto._
-import shapeless.ops.nat.Prod
+import io.circe.generic.codec.DerivedAsObjectCodec.deriveCodec
+
+
+
+
 
 
 
 object HttAppTry extends IOApp.Simple {
 
-  @derive(decoder, encoder, eqv, show) //, uuid
-  @newtype
-  case class ProdId(value: UUID)
 
-  object ProdId {
-    implicit val identityProdId: IsUUID[ProdId] = new IsUUID[ProdId] {
-      val _UUID = Iso[UUID, ProdId](ProdId(_))(_.value)
+  object Data {
+    @derive(decoder, encoder, eqv, show) //, uuid
+    @newtype
+    case class ProdId(value: UUID)
+
+    object ProdId {
+      implicit val identityProdId: IsUUID[ProdId] = new IsUUID[ProdId] {
+        val _UUID = Iso[UUID, ProdId](ProdId(_))(_.value)
+      }
     }
+
+    @derive(decoder, encoder, eqv, show)
+    @newtype
+    case class ProdName(value: String) {
+      def toProd(prodId: ProdId): Prod =
+        Prod(prodId, this)
+    }
+
+    @derive(decoder, encoder, eqv, show)
+    case class Prod(id: ProdId, name: ProdName)
   }
 
-  @derive(decoder, encoder, eqv, show)
-  @newtype
-  case class ProdName(value: String) {
-    def toProd(prodId: ProdId): Prod =
-      Prod(prodId, this)
-  }
-
-  @derive(decoder, encoder, eqv, show)
-  case class Prod(id: ProdId, name: ProdName)
-
+  import Data._
 
   trait Service[F[_]] {
     def findAll: F[List[Prod]]
@@ -112,18 +120,26 @@ object HttAppTry extends IOApp.Simple {
     }
   }
 
-
+  import shop.ext.http4s.refined._
 
   class ServiceAtRoute[F[_]: Monad](service: Service[F]) extends Http4sDsl[F] {
     private val httpRoutes: HttpRoutes[F] = HttpRoutes.of[F] {
       case GET -> Root => Ok(service.findAll)
+
+      case req @ POST -> Root =>
+        req.decodeR[ProdName] { pn =>
+          service.create(pn).flatMap { id => //.toDomain
+            Created(Prod(id, pn))
+            // Created(JsonObject.singleton("brand_id", id.asJson))
+          }
+        }
+
     }
 
     val routes: HttpRoutes[F] = Router(
       ServiceAtRoute.prefixPath -> httpRoutes
     )
   }
-
   object ServiceAtRoute {
     val prefixPath = "/prods"
   }
@@ -135,7 +151,6 @@ object HttAppTry extends IOApp.Simple {
     val httpReq = RequestLogger.httpApp(true, true)(http)
     ResponseLogger.httpApp(true, true)(httpReq)
   }
-
   val httpAppl = addLoggers(httpApp)
 
 
@@ -182,34 +197,34 @@ object HttAppTry extends IOApp.Simple {
 
 
 object HttAppClientTry extends IOApp.Simple {
-  import HttAppTry._
+  import HttAppTry.Data._
 
 
   trait ClientToApp {
-    def apply1: IO[List[Prod]]
-    def apply2(prodP: ProdName): IO[Prod]
+    def getProds: IO[List[Prod]]
+    def postProds(prodP: ProdName): IO[Prod]
   }
 
   object ClientToApp {
     def apply(client: Client[IO], uri: CUri): ClientToApp =
       new ClientToApp with Http4sClientDsl[IO] {
-        def apply1: IO[List[Prod]] =
+        def getProds: IO[List[Prod]] =
           Uri.fromString(uri.value + version.v1 + ServiceAtRoute.prefixPath).liftTo[IO].flatMap { uri =>
             client.run(GET(uri)).use { resp =>
               resp.status match {
                 case Status.Ok | Status.Conflict =>
                   resp.asJsonDecode[List[Prod]]
-                case st =>
+                case ex =>
                   PaymentError(
-                    Option(st.reason).getOrElse("unknown")
+                    Option(ex.reason).getOrElse("unknown")
                   ).raiseError[IO, List[Prod]]
               }
             }
           }
 
-        def apply2(prodP: ProdName): IO[Prod] =
+        def postProds(pn: ProdName): IO[Prod] =
           Uri.fromString(uri.value + version.v1).liftTo[IO].flatMap { uri =>
-            client.run(POST(prodP, uri / "prodsX")).use { resp =>
+            client.run(POST(pn, uri / "prods")).use { resp =>
               resp.status match {
                 case Status.Created | Status.Conflict =>
                   resp.asJsonDecode[Prod]
@@ -247,7 +262,7 @@ object HttAppClientTry extends IOApp.Simple {
         ClientToApp(client, HttAppTry.serverConfig.uri)
       }
       .use { capp =>
-        repeatMonton(capp.apply1, 1, 10L) //, .apply2(ProdName("Sepp"))
+        repeatMonton(capp.getProds, 1, 10L) //, .postProds(ProdName("Sepp"))
       }
       .flatMap { li =>
         IO.println(li)
