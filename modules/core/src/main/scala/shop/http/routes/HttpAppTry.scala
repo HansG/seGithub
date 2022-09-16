@@ -33,6 +33,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import cats.Monad
+import cats.data.Kleisli
 import cats.effect.kernel.Resource
 import com.comcast.ip4s.Literals.port
 import org.http4s._
@@ -96,7 +97,6 @@ object HttAppTry extends IOApp.Simple {
       } yield Prod(i, n)
 
     val bg                     = Gen.listOf(prodGen)
-    val params: Gen.Parameters = Gen.Parameters.default.withSize(10)
 
     val nonEmptyPList: Gen[List[Prod]] =
       Gen
@@ -106,6 +106,7 @@ object HttAppTry extends IOApp.Simple {
         }
 
     def genMockService: AMockService = new AMockService {
+      val params: Gen.Parameters = Gen.Parameters.default.withSize(10)
       override def findAll: IO[List[Prod]] =
         IO.pure(nonEmptyPList.pureApply(params, Seed.random(), 2))
     }
@@ -114,7 +115,6 @@ object HttAppTry extends IOApp.Simple {
 
 
   class ServiceAtRoute[F[_]: Monad](service: Service[F]) extends Http4sDsl[F] {
-
     private val httpRoutes: HttpRoutes[F] = HttpRoutes.of[F] {
       case GET -> Root => Ok(service.findAll)
     }
@@ -128,11 +128,22 @@ object HttAppTry extends IOApp.Simple {
     val prefixPath = "/prods"
   }
 
+  val serviceAtR: HttpRoutes[IO] = new ServiceAtRoute[IO](AMockService.genMockService).routes
+  val httpApp: HttpApp[IO] = Router(version.v1 -> serviceAtR).orNotFound
+
+  def addLoggers(http: HttpApp[IO]): HttpApp[IO] = {
+    val httpReq = RequestLogger.httpApp(true, true)(http)
+    ResponseLogger.httpApp(true, true)(httpReq)
+  }
+
+  val httpAppl = addLoggers(httpApp)
+
+
 
   @newtype case class CUri(value: NonEmptyString)
 
   case class ServerConfig(host: Host, port: Port) {
-    val uri = CUri(NonEmptyString.from(s"http://$host:$port").getOrElse("leer"))
+    val uri = CUri(NonEmptyString.from(s"http://$host:$port").getOrElse("http://localhost:8080"))
   }
 
   val serverConfig = ServerConfig(
@@ -148,16 +159,9 @@ object HttAppTry extends IOApp.Simple {
       .withHttpApp(httpApp)
       .build
 
-  implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
-  def withLoggers(http: HttpApp[IO]): HttpApp[IO] = {
-    val httpReq = RequestLogger.httpApp(true, true)(http)
-    ResponseLogger.httpApp(true, true)(httpReq)
-  }
 
   def start = {
-    val serviceR  = new ServiceAtRoute[IO](AMockService.genMockService).routes
-    val httpApp = withLoggers(Router(version.v1 -> serviceR).orNotFound)
-    val server  = httpAppAtServer[IO](serverConfig, httpApp)
+    val server  = httpAppAtServer[IO](serverConfig, httpAppl)
     server.useForever
   }
 
@@ -234,6 +238,7 @@ object HttAppClientTry extends IOApp.Simple {
 
 
 
+  implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
 
   def runClient = {
     Logger[IO].info(s"Loaded config $clientC")

@@ -31,7 +31,7 @@ object PostgresSuiteTry extends IOApp {
 //codecs
   val brandIdT: Codec[BrandIdT]     = uuid.imap[BrandIdT](BrandIdT(_))(_.value)
   val brandNameT: Codec[BrandNameT] = varchar.imap[BrandNameT](BrandNameT(_))(_.value)
-  val codecT: Codec[BrandT] =
+  val brandT: Codec[BrandT] =
     (brandIdT ~ brandNameT).imap {
       case i ~ n => BrandT(i, n)
     }(b => b.uuid ~ b.name)
@@ -39,12 +39,12 @@ object PostgresSuiteTry extends IOApp {
   val selectAll: Query[Void, BrandT] =
     sql"""
         SELECT * FROM brands
-       """.query(codecT)
+       """.query(brandT)
 
   val insertBrand: Command[BrandT] =
     sql"""
         INSERT INTO brands
-        VALUES ($codecT)
+        VALUES ($brandT)
         """.command
 
 
@@ -85,7 +85,7 @@ object PostgresSuiteTry extends IOApp {
   def idGen[A](f: UUID => A): Gen[A] =
     Gen.uuid.map(f)
 
-  lazy val brandIdGen: Gen[BrandIdT] =
+  lazy val brandIdTGen: Gen[BrandIdT] =
     idGen(BrandIdT.apply)
 
   lazy val nonEmptyStringGen: Gen[String] =
@@ -98,13 +98,13 @@ object PostgresSuiteTry extends IOApp {
   def nesGen[A](f: String => A): Gen[A] =
     nonEmptyStringGen.map(f)
 
-  lazy val brandNameGen: Gen[BrandNameT] =
+  lazy val brandNameTGen: Gen[BrandNameT] =
     nesGen(BrandNameT.apply)
 
-  lazy val brandGen: Gen[BrandT] =
+  lazy val brandTGen: Gen[BrandT] =
     for {
-      i <- brandIdGen
-      n <- brandNameGen
+      i <- brandIdTGen
+      n <- brandNameTGen
     } yield BrandT(i, n)
 
 
@@ -120,14 +120,14 @@ object PostgresSuiteTry extends IOApp {
       database = "store"
     )
 
-  val brandSession     = Brands.make[IO](singleSession)
-  val brand = brandGen.sample.get
+  val brandTSession     = BrandsT.make[IO](singleSession)
+  val brand = brandTGen.sample.get
   val res = for {
-    x <- brandSession.findAll
-    _ <- brandSession.create(brand.name)
-    y <- brandSession.findAll
-    z <- brandSession.create(brand.name).attempt
-  } yield println( x.toString() +"\n"+  (y.count(_.name == brand.name) == 1) + "\n" + z.isLeft )
+    x <- brandTSession.findAll
+    _ <- brandTSession.create(brand.name)
+    y <- brandTSession.findAll
+    z <- brandTSession.create(brand.name).attempt
+  } yield println( x.toString() +"\n"+  (y.count(_.name == brand.name) == 1) + "\n" + (z.fold(_.printStackTrace(), "Neu: "+ _.toString)  ))
 
  // res.unsafeRunSync()
 
