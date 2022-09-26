@@ -125,15 +125,13 @@ object HttAppTry extends IOApp.Simple {
   class ServiceAtRoute[F[_]: Monad](service: Service[F]) extends Http4sDsl[F] {
     private val httpRoutes: HttpRoutes[F] = HttpRoutes.of[F] {
       case GET -> Root => Ok(service.findAll)
-
       case req @ POST -> Root =>
-        req.decodeR[ProdName] { pn =>
+        req.decode[ProdName] { pn =>
           service.create(pn).flatMap { id => //.toDomain
             Created(Prod(id, pn))
             // Created(JsonObject.singleton("brand_id", id.asJson))
           }
         }
-
     }
 
     val routes: HttpRoutes[F] = Router(
