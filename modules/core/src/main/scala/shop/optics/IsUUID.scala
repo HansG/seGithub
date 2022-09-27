@@ -3,8 +3,8 @@ package shop.optics
 import cats.evidence.Is
 
 import java.util.UUID
-import shop.ext.derevo.Derive
 import monocle.Iso
+import shop.ext.derevo.Derive
 
 trait IsUUID[A] {
   def _UUID: Iso[UUID, A]

@@ -13,7 +13,7 @@ import monocle.Iso
 import org.http4s.Method._
 import org.http4s._
 import org.http4s.circe.CirceEntityCodec.circeEntityEncoder
-import org.http4s.circe.toMessageSyntax
+import org.http4s.circe.{JsonDecoder, toMessageSyntax}
 import org.http4s.client.Client
 import org.http4s.client.dsl.Http4sClientDsl
 import org.http4s.dsl.Http4sDsl
@@ -23,29 +23,21 @@ import org.scalacheck.Gen
 import org.scalacheck.rng.Seed
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
-import shop.config.types.{HttpClientConfig, HttpServerConfig}
-import shop.domain.ID._
-import shop.domain.order.PaymentError
-import shop.optics.IsUUID
-import shop.resources.{MkHttpClient, MkHttpServer}
 
 import java.util.UUID
-import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
-import cats.Monad
+import cats.{Monad, MonadThrow}
 import cats.data.Kleisli
 import cats.effect.kernel.Resource
-import com.comcast.ip4s.Literals.port
-import org.http4s._
-import org.http4s.dsl.Http4sDsl
 import org.http4s.ember.client.EmberClientBuilder
 import org.http4s.ember.server.EmberServerBuilder
 import org.http4s.server.{Router, Server}
-import org.http4s.server.defaults.Banner
 import upickle.default
 import eu.timepit.refined.auto._
+import io.circe.Decoder
 import io.circe.generic.codec.DerivedAsObjectCodec.deriveCodec
-
+import shop.domain.order.PaymentError
+import shop.http.routes.HttAppTry.{CUri, ServiceAtRoute}
 
 
 
@@ -75,6 +67,19 @@ object HttAppTry extends IOApp.Simple {
 
     @derive(decoder, encoder, eqv, show)
     case class Prod(id: ProdId, name: ProdName)
+
+    trait IsUUID[A] {
+      def _UUID: Iso[UUID, A]
+    }
+    object IsUUID {
+      def apply[A: IsUUID]: IsUUID[A] = implicitly
+
+      implicit val identityUUID: IsUUID[UUID] = new IsUUID[UUID] {
+        val _UUID = Iso[UUID, UUID](identity)(identity)
+      }
+    }
+
+    def make[F[_]: Sync, T : IsUUID] = Sync[F].delay(UUID.randomUUID()).map(IsUUID[T]._UUID.get(_))
   }
 
   import Data._
@@ -122,11 +127,11 @@ object HttAppTry extends IOApp.Simple {
 
   import shop.ext.http4s.refined._
 
-  class ServiceAtRoute[F[_]: Monad](service: Service[F]) extends Http4sDsl[F] {
+  class ServiceAtRoute[F[_]: Monad : JsonDecoder : MonadThrow](service: Service[F]) extends Http4sDsl[F] {
     private val httpRoutes: HttpRoutes[F] = HttpRoutes.of[F] {
       case GET -> Root => Ok(service.findAll)
       case req @ POST -> Root =>
-        req.decode[ProdName] { pn =>
+        req.decodeR[ProdName] { pn =>
           service.create(pn).flatMap { id => //.toDomain
             Created(Prod(id, pn))
             // Created(JsonObject.singleton("brand_id", id.asJson))

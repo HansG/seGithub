@@ -102,6 +102,7 @@ lazy val core = (project in file("modules/core"))
       Libraries.squants,
      // "com.lihaoyi" %% "ammonite" % "2.5.3" cross CrossVersion.full
       "com.lihaoyi" %% "ammonite" % "2.5.4" cross CrossVersion.full,
+      "com.github.scopt" %% "scopt" % "4.1.0",
     Libraries.catsLaws,
     Libraries.log4catsNoOp,
     Libraries.monocleLaw,
