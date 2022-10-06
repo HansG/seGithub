@@ -108,6 +108,14 @@ object PostgresSuiteTry extends IOApp {
     } yield BrandT(i, n)
 
 
+  val brandTLGen: Gen[List[BrandT]] =
+    Gen.chooseNum(1, 10)
+      .flatMap { n =>
+        Gen.buildableOfN[List[BrandT], BrandT](n, brandTGen)
+      }
+
+
+
   val flushTables: Command[Void] = sql"DELETE FROM #brands".command
 
 
@@ -121,8 +129,9 @@ object PostgresSuiteTry extends IOApp {
     )
 
   val brandTSession     = BrandsT.make[IO](singleSession)
-  val brand = brandTGen.sample.get
-  val res = for {
+  val brand: BrandT = brandTGen.sample.get
+  val brandL : List[BrandT] = brandTLGen.sample.get
+  def trys(brand: BrandT): IO[Unit] = for {
     x <- brandTSession.findAll
     _ <- brandTSession.create(brand.name)
     y <- brandTSession.findAll
@@ -132,7 +141,20 @@ object PostgresSuiteTry extends IOApp {
  // res.unsafeRunSync()
 
 
-  def run(args: List[String]): IO[ExitCode] =  res.as(ExitCode.Success)
+  def run(args: List[String]): IO[ExitCode] =  trys(brand).as(ExitCode.Success)
+
+  val pooledSessions: Resource[IO, Resource[IO, Session[IO]]] =
+    Session.pooled[IO](
+      host = "localhost",
+      port = 5432,
+      user = "postgres",
+      password = Some("postgres"),
+      database = "store",
+      max = 10
+    )
+
+   //gen zu stream + parMap mit pooledSessions
+
 
 
   val test0 = singleSession.use { s => // (3)

@@ -25,7 +25,7 @@ final case class LoginRoutes[F[_]: JsonDecoder: MonadThrow](
       req.decodeR[LoginUser] { user =>
         auth
           .login(user.username.toDomain, user.password.toDomain)
-          .flatMap(Ok(_))
+          .flatMap(t => Ok(t))
           .recoverWith {
             case UserNotFound(_) | InvalidPassword(_) => Forbidden()
           }
