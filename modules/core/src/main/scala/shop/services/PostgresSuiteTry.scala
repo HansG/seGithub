@@ -10,6 +10,7 @@ import skunk.implicits._
 import skunk.codec.all._
 import natchez.Trace.Implicits.noop
 import shop.domain.ID
+import shop.domain.auth.{EncryptedPassword, UserName}
 import shop.effects.GenUUID
 import shop.optics.IsUUID
 
@@ -140,6 +141,33 @@ object PostgresSuiteTry extends IOApp {
 
  // res.unsafeRunSync()
 
+  object UserTry {
+    case class UserT(id:UUID, name:String, pwd:String)
+
+    val codec = (uuid ~ varchar ~ varchar).imap {
+      case id ~ name ~ pwd => UserT(id,name,pwd)
+    } {
+      case u =>   u.id ~ u.name ~ u.pwd
+    }
+    val insertC = sql"insert into users $codec".command
+
+    def insertu(dbres : Res, username : String, password: String) = dbres.use(s =>
+      s.prepare(insertC).use(pc =>
+          pc.execute(UserT(UUID.randomUUID(), "Ha", "pa"))
+        )
+    )
+
+    val u = Users.make[IO](singleSession)
+
+    def save(username : String, password: String) =
+    for {
+      d <- u.create(UserName(username), EncryptedPassword(password) )
+      x <- u.find(UserName(username))
+    } yield x.count(_.id == d)
+
+
+
+  }
 
   def run(args: List[String]): IO[ExitCode] =  trys(brand).as(ExitCode.Success)
 
