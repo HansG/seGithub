@@ -6,9 +6,10 @@
 
 import cats._
 import cats.effect._
+import cats.effect.std.Console
 import cats.syntax.all._
 import fs2.Stream
-import fs2.io.net.SocketGroup
+import fs2.io.net.{Network, SocketGroup}
 import io.circe.Encoder
 import io.circe.generic.semiauto.deriveEncoder
 import io.circe.syntax._
@@ -27,6 +28,7 @@ import skunk.{Fragment, Query, Session, Void}
 import skunk.codec.text.{bpchar, varchar}
 import skunk.implicits._
 import fs2.io.tcp.SocketGroup
+import org.jline.reader.impl.DefaultParser.Bracket
 import skunk.util.Pool
 import skunk.util.Recycler
 
@@ -72,9 +74,9 @@ import scala.concurrent.ExecutionContext.global
      Session.Recyclers.minimal[F].contramap(_.session)
 
    /** Given a `Session` we can create a `Countries` resource with pre-prepared statements. */
-   def countriesFromSession[F[_]: Bracket[*[_], Throwable]: Trace](
+   def countriesFromSession[F[_] : Trace](
      sess: Session[F]
-   ): Resource[F, PooledCountries[F]] = {
+   ): Resource[F, Countries[F]] = {
 
      def countryQuery[A](where: Fragment[A]): Query[A, Country] =
        sql"SELECT code, name FROM country $where".query((bpchar(3) ~ varchar).gmap[Country])
@@ -82,18 +84,15 @@ import scala.concurrent.ExecutionContext.global
      for {
        psAll    <- sess.prepare(countryQuery(Fragment.empty))
        psByCode <- sess.prepare(countryQuery(sql"WHERE code = ${bpchar(3)}"))
-     } yield new PooledCountries[F] {
+     } yield new  Countries[F] {
 
        def byCode(code: String): F[Option[Country]] =
-         Trace[F].span(s"""Country.byCode("$code")""") {
+         Trace[F].span(s"""Country.byCode("$code")""") {//???muss sess.prepare(...) hierin laufen??? ...damit prepare parallel aufgerufen wird
            psByCode.option(code)
          }
 
        def all: Stream[F,Country] =
          psAll.stream(Void, 64)
-
-       def session: Session[F] =
-         sess
 
      }
 
@@ -103,27 +102,47 @@ import scala.concurrent.ExecutionContext.global
     * Given a `SocketGroup` we can construct a session resource, and from that construct a
     * `Countries` resource.
     */
-   def countriesFromSocketGroup[F[_]: Concurrent: ContextShift: Trace](
-     socketGroup: SocketGroup[F]
-   ): Resource[F, PooledCountries[F]] =
-     Session.fromSocketGroup(
-       host         = "localhost",
-       user         = "jimmy",
-       database     = "world",
-       password     = Some("banana"),
-       socketGroup  = socketGroup,
-       sslOptions   = None,
-       parameters   = Session.DefaultConnectionParameters
+//   def countriesFromSocketGroup[F[_]: Concurrent: ContextShift: Trace](
+//     socketGroup: SocketGroup[F]
+//   ): Resource[F, PooledCountries[F]] =
+//     Session.fromSocketGroup(
+//       host         = "localhost",
+//       user         = "jimmy",
+//       database     = "world",
+//       password     = Some("banana"),
+//       socketGroup  = socketGroup,
+//       sslOptions   = None,
+//       parameters   = Session.DefaultConnectionParameters
+//     ).flatMap(countriesFromSession(_))
+
+   def countriesFromSocketGroup[F[_]: Concurrent: Network : Console : Trace]: Resource[F, PooledCountries[F]] =
+     Session.single[F](
+       host = "localhost",
+       port = 5432,
+       user = "jimmy",
+       password = Some("banana"),
+       database = "world"
      ).flatMap(countriesFromSession(_))
 
+
    /** Resource yielding a pool of `Countries`, backed by a single `Blocker` and `SocketGroup`. */
-   def pool[F[_]: Concurrent: ContextShift: Trace]: Resource[F, Resource[F, Countries[F]]] =
-     for {
-       b  <- Blocker[F]
-       sg <- SocketGroup[F](b)
-       pc  = countriesFromSocketGroup(sg)
-       r  <- Pool.of(pc, 10)(pooledCountriesRecycler)
-     } yield r.widen // forget we're a PooledCountries
+//   def pool[F[_]: Concurrent: ContextShift: Trace]: Resource[F, Resource[F, Countries[F]]] =
+//     for {
+//       b  <- Blocker[F]
+//       sg <- fs2.io.net.SocketGroup[F[_]](b)
+//       pc  = countriesFromSocketGroup(sg)
+//       r  <- Pool.of(pc, 10)(pooledCountriesRecycler)
+//     } yield r.widen // forget we're a PooledCountries
+   def pool[F[_]: Concurrent: Network : Console : Trace]: Resource[F, Resource[F, Countries[F]]] =
+    Session.pooled[F](
+      host = "localhost",
+      port = 5432,
+      user = "jimmy",
+      password = Some("banana"),
+      database = "world",
+      max = 10
+    ).flatMap( _.flatMap(countriesFromSession(_)))
+
 
    /** Given a pool of `Countries` we can create an `HttpRoutes`. */
    def countryRoutes[F[_]: Concurrent: Trace](
