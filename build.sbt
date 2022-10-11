@@ -50,6 +50,7 @@ lazy val tests = (project in file("modules/tests"))
 
 lazy val javaFXModules = Seq("base", "controls", "fxml", "graphics", "media", "swing", "web")
 
+val natchezVersion = "0.1.6"
 lazy val core = (project in file("modules/core"))
   .enablePlugins(DockerPlugin)
   .enablePlugins(AshScriptPlugin)
@@ -83,6 +84,7 @@ lazy val core = (project in file("modules/core"))
       Libraries.derevoCats,
       Libraries.derevoCirce,
       Libraries.fs2,
+      Libraries.fs2io,
       Libraries.http4sDsl,
       Libraries.http4sServer,
       Libraries.http4sClient,
@@ -103,7 +105,11 @@ lazy val core = (project in file("modules/core"))
      // "com.lihaoyi" %% "ammonite" % "2.5.3" cross CrossVersion.full
       "com.lihaoyi" %% "ammonite" % "2.5.4" cross CrossVersion.full,
       "com.github.scopt" %% "scopt" % "4.1.0",
-    Libraries.catsLaws,
+      "org.tpolecat" %% "natchez-core" % natchezVersion,
+      "org.tpolecat" %% "natchez-jaeger" % natchezVersion,
+      "org.tpolecat" %% "natchez-honeycomb" % natchezVersion,
+      "org.tpolecat" %% "natchez-jaeger" % natchezVersion,
+        Libraries.catsLaws,
     Libraries.log4catsNoOp,
     Libraries.monocleLaw,
     Libraries.refinedScalacheck,

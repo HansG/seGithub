@@ -40,7 +40,7 @@ import shop.domain.order.PaymentError
 
 object HttAppTry extends IOApp.Simple {
 
-  object Data {
+  object Domain {
     @derive(decoder, encoder, eqv, show) //, uuid
     @newtype
     case class ProdId(value: UUID)
@@ -75,7 +75,7 @@ object HttAppTry extends IOApp.Simple {
     def make[F[_]: Sync, T: IsUUID] = Sync[F].delay(UUID.randomUUID()).map(IsUUID[T]._UUID.get(_))
   }
 
-  import Data._
+  import Domain._
 
   trait Service[F[_]] {
     def findAll: F[List[Prod]]
@@ -192,8 +192,8 @@ object HttAppTry extends IOApp.Simple {
 //Client ------------------------------------------------------
 
 object HttAppClientTry extends IOApp.Simple {
-  import HttAppTry.{UriConfigI, UriConfig, Data }
-  import Data._
+  import HttAppTry.{UriConfigI, UriConfig, Domain }
+  import Domain._
 
   trait ClientToAppI {
     def getProds: IO[List[Prod]]

@@ -41,6 +41,7 @@ object Dependencies {
     val catsRetry  = "com.github.cb372" %% "cats-retry"  % V.catsRetry
     val squants    = "org.typelevel"    %% "squants"     % V.squants
     val fs2        = "co.fs2"           %% "fs2-core"    % V.fs2
+    val fs2io        = "co.fs2"           %% "fs2-io"    % V.fs2
 
     val circeCore    = circe("core")
     val circeGeneric = circe("generic")

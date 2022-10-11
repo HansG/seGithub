@@ -1,29 +1,31 @@
 package shop.services
 
 import org.scalacheck.Gen
-import shop.domain.brand.{Brand, BrandId, BrandName}
+import shop.domain.brand.{ Brand, BrandId, BrandName }
 import cats.effect._
-import cats.implicits.{toFlatMapOps, toFunctorOps}
+import cats.implicits.{ catsSyntaxOptionId, none, toFlatMapOps, toFunctorOps }
 import monocle.Iso
 import skunk._
 import skunk.implicits._
 import skunk.codec.all._
 import natchez.Trace.Implicits.noop
 import shop.domain.ID
-import shop.domain.auth.{EncryptedPassword, UserName}
+import shop.domain.auth.{ EncryptedPassword, UserName }
 import shop.effects.GenUUID
 import shop.optics.IsUUID
+import shop.services.PostgresSuiteTry.Res
 
 import java.util.UUID
 
-object PostgresSuiteTry extends IOApp {
+object PostgresSuiteTry {
+  import StartPostgres._
 
   type Res = Resource[IO, Session[IO]]
 
   case class BrandIdT(value: UUID)
   object BrandIdT {
     implicit val isuuid: IsUUID[BrandIdT] = new IsUUID[BrandIdT] {
-       val _UUID: Iso[UUID, BrandIdT] = Iso[UUID, BrandIdT](BrandIdT(_))(_.value)
+      val _UUID: Iso[UUID, BrandIdT] = Iso[UUID, BrandIdT](BrandIdT(_))(_.value)
     }
   }
   case class BrandNameT(value: String)
@@ -48,7 +50,6 @@ object PostgresSuiteTry extends IOApp {
         VALUES ($brandT)
         """.command
 
-
   trait BrandsT[F[_]] {
     def findAll: F[List[BrandT]]
     def create(name: BrandNameT): F[BrandIdT]
@@ -56,8 +57,8 @@ object PostgresSuiteTry extends IOApp {
 
   object BrandsT {
     def make[F[_]: GenUUID: MonadCancelThrow](
-                                               postgres: Resource[F, Session[F]]
-                                             ): BrandsT[F] =
+        postgres: Resource[F, Session[F]]
+    ): BrandsT[F] =
       new BrandsT[F] {
 
         def findAll: F[List[BrandT]] =
@@ -74,15 +75,6 @@ object PostgresSuiteTry extends IOApp {
       }
   }
 
-
-
-
-
-
-
-
-
-
   def idGen[A](f: UUID => A): Gen[A] =
     Gen.uuid.map(f)
 
@@ -94,7 +86,8 @@ object PostgresSuiteTry extends IOApp {
       .chooseNum(7, 15)
       .flatMap { n =>
         Gen.buildableOfN[String, Char](n, Gen.alphaChar)
-      }.map(_.toLowerCase.capitalize)
+      }
+      .map(_.toLowerCase.capitalize)
 
   def nesGen[A](f: String => A): Gen[A] =
     nonEmptyStringGen.map(f)
@@ -108,70 +101,104 @@ object PostgresSuiteTry extends IOApp {
       n <- brandNameTGen
     } yield BrandT(i, n)
 
-
   val brandTLGen: Gen[List[BrandT]] =
-    Gen.chooseNum(1, 10)
+    Gen
+      .chooseNum(1, 10)
       .flatMap { n =>
         Gen.buildableOfN[List[BrandT], BrandT](n, brandTGen)
       }
 
-
-
   val flushTables: Command[Void] = sql"DELETE FROM #brands".command
 
-
-  val singleSession: Res =
-    Session.single[IO](
-      host = "localhost",
-      port = 5432,
-      user = "postgres",
-      password = Some("postgres"),
-      database = "store"
+  val brandTSession        = BrandsT.make[IO](singleSession)
+  val brand: BrandT        = brandTGen.sample.get
+  val brandL: List[BrandT] = brandTLGen.sample.get
+  def trys(brand: BrandT): IO[Unit] =
+    for {
+      x <- brandTSession.findAll
+      _ <- brandTSession.create(brand.name)
+      y <- brandTSession.findAll
+      z <- brandTSession.create(brand.name).attempt
+    } yield println(
+      x.toString() + "\n" + (y.count(_.name == brand.name) == 1) + "\n" + (z
+        .fold(_.printStackTrace(), "Neu: " + _.toString))
     )
 
-  val brandTSession     = BrandsT.make[IO](singleSession)
-  val brand: BrandT = brandTGen.sample.get
-  val brandL : List[BrandT] = brandTLGen.sample.get
-  def trys(brand: BrandT): IO[Unit] = for {
-    x <- brandTSession.findAll
-    _ <- brandTSession.create(brand.name)
-    y <- brandTSession.findAll
-    z <- brandTSession.create(brand.name).attempt
-  } yield println( x.toString() +"\n"+  (y.count(_.name == brand.name) == 1) + "\n" + (z.fold(_.printStackTrace(), "Neu: "+ _.toString)  ))
-
- // res.unsafeRunSync()
+  // res.unsafeRunSync()
 
   object UserTry {
-    case class UserT(id:UUID, name:String, pwd:String)
+    case class UserT(id: UUID, name: String, pwd: String)
 
     val codec = (uuid ~ varchar ~ varchar).imap {
-      case id ~ name ~ pwd => UserT(id,name,pwd)
+      case id ~ name ~ pwd => UserT(id, name, pwd)
     } {
-      case u =>   u.id ~ u.name ~ u.pwd
+      case u => u.id ~ u.name ~ u.pwd
     }
-    val insertC = sql"insert into users $codec".command
+    val insertSql = sql"insert into users $codec".command
 
-    def insertu(dbres : Res, username : String, password: String) = dbres.use(s =>
-      s.prepare(insertC).use(pc =>
-          pc.execute(UserT(UUID.randomUUID(), "Ha", "pa"))
-        )
-    )
+    def insert(dbres: Res, username: String, password: String) =
+      dbres.use(s => s.prepare(insertSql).use(pc => pc.execute(UserT(UUID.randomUUID(), username, password))))
 
-    val u = Users.make[IO](singleSession)
+    val findSql = sql"select * from users where username = $varchar".query(codec)
 
-    def save(username : String, password: String) =
-    for {
-      d <- u.create(UserName(username), EncryptedPassword(password) )
-      x <- u.find(UserName(username))
-    } yield x.count(_.id == d)
+    def find(dbres: Res, uname: String) = dbres.use { s =>
+      s.prepare(findSql).use { q =>
+        q.option(uname).map {
+          case Some(u) => u.some
+          case _       => none[UserT]
+        }
+      }
+    }
 
-
+    def test(dbres: Res, username: String, password: String) =
+      for {
+        d <- insert(dbres, username, password)
+        x <- find(dbres, username)
+      } yield x.count(_.id == d)
 
   }
 
-  def run(args: List[String]): IO[ExitCode] =  trys(brand).as(ExitCode.Success)
 
-  val pooledSessions: Resource[IO, Resource[IO, Session[IO]]] =
+
+
+
+  //gen zu stream + parMap mit pooledSessions
+
+  val test0 = singleSession.use { s => // (3)
+    for {
+      d <- s.unique(sql"select current_date".query(date)) // (4)
+      _ <- IO.println(s"The current date is $d.")
+    } yield ExitCode.Success
+  }
+
+}
+
+object PostgresTestTry extends IOApp {
+  import PostgresSuiteTry._
+  import StartPostgres._
+  //def run(args: List[String]): IO[ExitCode] = trys(brand).as(ExitCode.Success)
+  def run(args: List[String]): IO[ExitCode] = {
+    UserTry.test(singleSession, "Ha", "aH") .as(ExitCode.Success)
+    UserTry.test(singleSession, "Sa", "aS") .as(ExitCode.Success)
+    UserTry.test(singleSession, "Mo", "om") .as(ExitCode.Success)
+    UserTry.test(singleSession, "Ad", "da") .as(ExitCode.Success)
+  }
+}
+
+object StartPostgres extends App {
+  // os.proc("""C:\se\prog\postgresql\12\bin\pg_ctl.exe""", "runservice",  """-N "postgresql-x64-12"""", """-D "C:\se\prog\postgresql\12\data"""",  "-w")
+
+//    Sync[F].delay(new Configuration(system))
+//      .flatMap(configure)
+//      .flatTap(GlobalTracer.registerTracer[F])
+
+  Resource.make( IO(os.proc("""C:\se\prog\postgresql\12\pgAdmin 4\bin\pgAdmin4.exe""").call() ) )(c => IO(println(c.toString()) ))
+    .useForever
+//    .map { new JaegerEntryPoint[F](_, uriPrefix) }
+
+
+
+  lazy val pooledSessions: Resource[IO, Resource[IO, Session[IO]]] =
     Session.pooled[IO](
       host = "localhost",
       port = 5432,
@@ -181,15 +208,13 @@ object PostgresSuiteTry extends IOApp {
       max = 10
     )
 
-   //gen zu stream + parMap mit pooledSessions
-
-
-
-  val test0 = singleSession.use { s => // (3)
-      for {
-        d <- s.unique(sql"select current_date".query(date)) // (4)
-        _ <- IO.println(s"The current date is $d.")
-      } yield ExitCode.Success
-    }
+  lazy val singleSession: Res =
+    Session.single[IO](
+      host = "localhost",
+      port = 5432,
+      user = "postgres",
+      password = Some("postgres"),
+      database = "store"
+    )
 
 }
