@@ -5,31 +5,26 @@
  package shop.services
 
 import cats._
-import cats.effect._
+import cats.effect.{Resource, _}
 import cats.effect.std.Console
 import cats.syntax.all._
+import com.comcast.ip4s.IpLiteralSyntax
 import fs2.Stream
 import fs2.io.net.{Network, SocketGroup}
 import io.circe.Encoder
 import io.circe.generic.semiauto.deriveEncoder
 import io.circe.syntax._
-import io.jaegertracing.Configuration.ReporterConfiguration
-import io.jaegertracing.Configuration.SamplerConfiguration
+import natchez.Trace.Implicits.noop
 import natchez.{EntryPoint, Trace}
-import natchez.http4s.implicits._
-import natchez.jaeger.Jaeger
 import org.http4s.{HttpApp, HttpRoutes}
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
 import org.http4s.implicits._
 import org.http4s.server.{Router, Server}
-import org.http4s.server.blaze.BlazeServerBuilder
 import skunk.{Fragment, Query, Session, Void}
 import skunk.codec.text.{bpchar, varchar}
 import skunk.implicits._
-import fs2.io.tcp.SocketGroup
-import org.jline.reader.impl.DefaultParser.Bracket
-import skunk.util.Pool
+import org.http4s.ember.server.EmberServerBuilder
 import skunk.util.Recycler
 
 import scala.concurrent.ExecutionContext.global
@@ -75,24 +70,28 @@ import scala.concurrent.ExecutionContext.global
 
    /** Given a `Session` we can create a `Countries` resource with pre-prepared statements. */
    def countriesFromSession[F[_] : Trace](
-     sess: Session[F]
-   ): Resource[F, Countries[F]] = {
+                                       pool:    Resource[F, Session[F]]
+   ):   Countries[F]  = {
 
      def countryQuery[A](where: Fragment[A]): Query[A, Country] =
        sql"SELECT code, name FROM country $where".query((bpchar(3) ~ varchar).gmap[Country])
+     new  Countries[F] {
+       for {
+         psAll    <- sess.prepare(countryQuery(Fragment.empty))
+         psByCode <- sess.prepare(countryQuery(sql"WHERE code = ${bpchar(3)}"))
+       } yield {
 
-     for {
-       psAll    <- sess.prepare(countryQuery(Fragment.empty))
-       psByCode <- sess.prepare(countryQuery(sql"WHERE code = ${bpchar(3)}"))
-     } yield new  Countries[F] {
+         def byCode(code: String): F[Option[Country]] =
+           Trace[F].span(s"""Country.byCode("$code")""") {
+             pool.use(sess => sess.prepare(countryQuery(sql"WHERE code = ${bpchar(3)}")).use(
+               psByCode.option(code)
+             ))
+           }
 
-       def byCode(code: String): F[Option[Country]] =
-         Trace[F].span(s"""Country.byCode("$code")""") {//???muss sess.prepare(...) hierin laufen??? ...damit prepare parallel aufgerufen wird
-           psByCode.option(code)
-         }
+         def all: Stream[F,Country] =
+           psAll.stream(Void, 64)
 
-       def all: Stream[F,Country] =
-         psAll.stream(Void, 64)
+       }
 
      }
 
@@ -114,8 +113,8 @@ import scala.concurrent.ExecutionContext.global
 //       sslOptions   = None,
 //       parameters   = Session.DefaultConnectionParameters
 //     ).flatMap(countriesFromSession(_))
-
-   def countriesFromSocketGroup[F[_]: Concurrent: Network : Console : Trace]: Resource[F, PooledCountries[F]] =
+  //zuvor countriesFromSocketGroup
+   def singleSession[F[_]: Concurrent: Network : Console : Trace]: Resource[F, Countries[F]] =
      Session.single[F](
        host = "localhost",
        port = 5432,
@@ -140,8 +139,10 @@ import scala.concurrent.ExecutionContext.global
       user = "jimmy",
       password = Some("banana"),
       database = "world",
-      max = 10
-    ).flatMap( _.flatMap(countriesFromSession(_)))
+      max = 10,
+      commandCache = 0,
+      queryCache = 0
+    ).map( rr =>   rr.flatMap( s => countriesFromSession(s)))
 
 
    /** Given a pool of `Countries` we can create an `HttpRoutes`. */
@@ -170,36 +171,25 @@ import scala.concurrent.ExecutionContext.global
     * Using `pool` above we can create `HttpRoutes` resource. We also add some standard tracing
     * middleware while we're at it.
     */
-   def routes[F[_]: Concurrent: ContextShift: Trace]: Resource[F, HttpRoutes[F]] =
-     pool.map(p => natchezMiddleware(countryRoutes(p)))
+   def routes[F[_]: Concurrent: Network : Console : Trace]: Resource[F, HttpRoutes[F]] =
+     pool.map(p => countryRoutes(p))
 
-   /** Our Natchez `EntryPoint` resource. */
-   def entryPoint[F[_]: Sync]: Resource[F, EntryPoint[F]] = {
-     Jaeger.entryPoint[F]("skunk-http4s-example") { c =>
-       Sync[F].delay {
-         c.withSampler(SamplerConfiguration.fromEnv)
-          .withReporter(ReporterConfiguration.fromEnv)
-          .getTracer
-       }
-     }
-   }
 
    /** Given an `HttpApp` we can create a running `Server` resource. */
-   def server[F[_]: ConcurrentEffect: Timer](
-     app: HttpApp[F]
-   ): Resource[F, Server[F]] =
-     BlazeServerBuilder[F](global)
-       .bindHttp(8080, "localhost")
-       .withHttpApp(app)
-       .resource
+   def server[F[_]:  Async](
+                                              httpApp: HttpApp[F]
+   ): Resource[F, Server] =
+   EmberServerBuilder
+     .default[F]
+     .withHost(host"localhost")
+     .withPort(port"8080")
+     .withHttpApp(httpApp)
+     .build
 
    /** Our application as a resource. */
-   def runR[F[_]: ConcurrentEffect: ContextShift: Timer]: Resource[F, Unit] =
+   def runR[F[_]: Async : Console : Trace]: Resource[F, Unit] =
      for {
-       ep <- entryPoint[F]
-       rs <- ep.liftR(routes) // Discharge the `Trace` constraint for `routes`. Type argument here
-                              // will be inferred as Kleisli[F, Span[F], *] but we never see that
-                              // type in our code, which makes it a little nicer.
+       rs <- routes
        _  <- server(Router("/" -> rs).orNotFound)
      } yield ()
 
