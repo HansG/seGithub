@@ -120,8 +120,8 @@ object HttAppTry extends IOApp.Simple {
 
   import shop.ext.http4s.refined._
 
-  class ServiceAtHttpApp(service: Service[IO]) extends Http4sDsl[IO] {
-    val httpRoutes: HttpRoutes[IO] = HttpRoutes.of[IO] {
+  case class ServiceAtHttpApp(service: Service[IO]) extends Http4sDsl[IO] {
+    lazy val httpRoutes: HttpRoutes[IO] = HttpRoutes.of[IO] {
       case GET -> Root => Ok(service.findAll)
       case req @ POST -> Root =>
         req.decodeR[ProdName] { pn =>
@@ -130,6 +130,17 @@ object HttAppTry extends IOApp.Simple {
             // Created(JsonObject.singleton("brand_id", id.asJson))
           }
         }
+    }
+
+    def apply =  {
+      val satrr: HttpRoutes[IO] = Router(UriConfig.pathPrefix -> httpRoutes)
+      val app                   = Router(UriConfig.vers -> satrr).orNotFound
+
+      def addLoggers[F[_]: Async](http: HttpApp[F]): HttpApp[F] = {
+        val httpReq = RequestLogger.httpApp(true, true)(http)
+        ResponseLogger.httpApp(true, true)(httpReq)
+      }
+      addLoggers(app)
     }
   }
 
@@ -153,17 +164,6 @@ object HttAppTry extends IOApp.Simple {
     override val uri: IO[Uri] = apply()
   }
 
-  def serviceAtHttpApp(service: AMockService): HttpApp[IO] = {
-    def addLoggers[F[_]: Async](http: HttpApp[F]): HttpApp[F] = {
-      val httpReq = RequestLogger.httpApp(true, true)(http)
-      ResponseLogger.httpApp(true, true)(httpReq)
-    }
-
-    val satr                  = new ServiceAtHttpApp(service)
-    val satrr: HttpRoutes[IO] = Router(UriConfig.pathPrefix -> satr.httpRoutes)
-    val app                   = Router(UriConfig.vers -> satrr).orNotFound
-    addLoggers(app)
-  }
 
   def httpAppAtServer[F[_]: Async](httpApp: HttpApp[F]) =
     EmberServerBuilder
@@ -174,7 +174,7 @@ object HttAppTry extends IOApp.Simple {
       .build
 
   def start = {
-    val server = httpAppAtServer[IO](serviceAtHttpApp(AMockService.genMockService))
+    val server = httpAppAtServer[IO]( ServiceAtHttpApp(AMockService.genMockService).apply )
     server.useForever
   }
 
@@ -195,12 +195,12 @@ object HttAppClientTry extends IOApp.Simple {
   import HttAppTry.{UriConfigI, UriConfig, Domain }
   import Domain._
 
-  trait ClientToAppI {
+  trait ClientApi {
     def getProds: IO[List[Prod]]
     def postProds(prodP: ProdName): IO[Prod]
   }
 
-  case class ClientToServer(client: Client[IO], uriConfig: UriConfigI) extends ClientToAppI with Http4sClientDsl[IO] {
+  case class EmberClientAtServer(client: Client[IO], uriConfig: UriConfigI) extends ClientApi with Http4sClientDsl[IO] {
 
     def getProds: IO[List[Prod]] =
       uriConfig.uri.flatMap { uri =>
@@ -232,7 +232,7 @@ object HttAppClientTry extends IOApp.Simple {
   }
 
 
-  def newClient[F[_]: Async](timeout: FiniteDuration = 60.seconds, idleTimeInPool: FiniteDuration = 30.seconds): Resource[F, Client[F]] =
+  def newEmberClient[F[_]: Async](timeout: FiniteDuration = 60.seconds, idleTimeInPool: FiniteDuration = 30.seconds): Resource[F, Client[F]] =
     EmberClientBuilder
       .default[F]
       .withTimeout(timeout)
@@ -243,9 +243,9 @@ object HttAppClientTry extends IOApp.Simple {
 
   def runClient = {
     //Logger[IO].info(s"Loaded config $clientC")
-    newClient[IO]()
+    newEmberClient[IO]()
       .map { client =>
-        ClientToServer(client, UriConfig)
+        EmberClientAtServer(client, UriConfig)
       }
       .use { capp =>
         repeatMonton(capp.getProds, 1, 10L) //, .postProds(ProdName("Sepp"))
