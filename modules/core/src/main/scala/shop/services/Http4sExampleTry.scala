@@ -133,7 +133,7 @@ object Http4sExample extends IOApp {
 //       pc  = countriesFromSocketGroup(sg)
 //       r  <- Pool.of(pc, 10)(pooledCountriesRecycler)
 //     } yield r.widen // forget we're a PooledCountries
-  def pool[F[_]: Concurrent: Network: Console: Trace]: Resource[F, Resource[F, CountryService[F]]] =
+  def resResService[F[_]: Concurrent: Network: Console: Trace]: Resource[F, Resource[F, CountryService[F]]] =
     Session
       .pooled[F](
         host = "localhost",
@@ -148,7 +148,7 @@ object Http4sExample extends IOApp {
       .map(rs => countriesFromSession(rs))
 
   /** Given a pool of `Countries` we can create an `HttpRoutes`. */
-  def countryRoutes[F[_]: Concurrent: Trace](
+  def resRoutes[F[_]: Concurrent: Trace](
       pool: Resource[F, CountryService[F]]
   ): Resource[F, HttpRoutes[F]] = {
     object dsl extends Http4sDsl[F];
@@ -167,24 +167,23 @@ object Http4sExample extends IOApp {
             val stt = st.compile.toList.map(_.asJson)
             Ok(stt)
           }
-
       }
-
-
     }
   }
 
-  val routes[F[_]: Concurrent: Network: Console: Trace]: Resource[F, HttpRoutes[F]] =
-    pool.flatMap(p => countryRoutes(p))
 
-  def addLoggers[F[_]: Async](http: HttpApp[F]): HttpApp[F] = {
-    val httpReq = RequestLogger.httpApp(true, true)(http)
-    ResponseLogger.httpApp(true, true)(httpReq)
+
+  def  httpApp[F[_]: Async: Console: Trace]( r : HttpRoutes[F]) :  HttpApp[F]  = {
+    def addLoggers[F[_]: Async](http: HttpApp[F]): HttpApp[F] = {
+      val httpReq = RequestLogger.httpApp(true, true)(http)
+      ResponseLogger.httpApp(true, true)(httpReq)
+    }
+
+    addLoggers(Router("/" -> r).orNotFound)
   }
 
-
   /** Given an `HttpApp` we can create a running `Server` resource. */
-  def server[F[_]: Async](
+  def resServer[F[_]: Async](
       httpApp: HttpApp[F]
   ): Resource[F, Server] =
     EmberServerBuilder
@@ -197,8 +196,10 @@ object Http4sExample extends IOApp {
   /** Our application as a resource. */
   def runR[F[_]: Async: Console: Trace]: Resource[F, Unit] =
     for {
-      rs <- routes
-      _  <- server(Router("/" -> rs).orNotFound)
+      rrs <- resResService
+      routes <-  resRoutes(rrs)
+      app =  httpApp(routes)
+      _  <- resServer(app)
     } yield ()
 
   /** Main method instantiates `F` to `IO` and `use`s our resource forever. */
