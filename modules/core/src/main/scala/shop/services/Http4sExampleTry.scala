@@ -52,7 +52,7 @@ import scala.concurrent.ExecutionContext.global
    }
 
    /** A service interface and companion factory method. */
-   trait Countries[F[_]] {
+   trait CountryService[F[_]] {
      def byCode(code: String): F[Option[Country]]
      def all: Stream[F, Country]
    }
@@ -61,7 +61,7 @@ import scala.concurrent.ExecutionContext.global
     * A refinement that provides a handle to the underlying session. We will use this to implement
     * our pool recycler.
     */
-   trait PooledCountries[F[_]] extends Countries[F] {
+   trait PooledCountries[F[_]] extends CountryService[F] {
      def session: Session[F]
    }
 
@@ -69,33 +69,31 @@ import scala.concurrent.ExecutionContext.global
      Session.Recyclers.minimal[F].contramap(_.session)
 
    /** Given a `Session` we can create a `Countries` resource with pre-prepared statements. */
-   def countriesFromSession[F[_] : Trace](
-                                       pool:    Resource[F, Session[F]]
-   ):   Countries[F]  = {
+   def countriesFromSession[F[_] : Trace : Monad : MonadCancel[*[_], Throwable] ]( pool:    Resource[F, Session[F]] ): Resource[F, CountryService[F] ] = {
 
      def countryQuery[A](where: Fragment[A]): Query[A, Country] =
        sql"SELECT code, name FROM country $where".query((bpchar(3) ~ varchar).gmap[Country])
-     new  Countries[F] {
-       for {
-         psAll    <- sess.prepare(countryQuery(Fragment.empty))
-         psByCode <- sess.prepare(countryQuery(sql"WHERE code = ${bpchar(3)}"))
-       } yield {
 
+     pool.map { sess =>
+       new  CountryService[F] {
          def byCode(code: String): F[Option[Country]] =
            Trace[F].span(s"""Country.byCode("$code")""") {
-             pool.use(sess => sess.prepare(countryQuery(sql"WHERE code = ${bpchar(3)}")).use(
-               psByCode.option(code)
-             ))
+               sess.prepare(countryQuery(sql"WHERE code = ${bpchar(3)}")).use { psByCode =>
+                 psByCode.option(code)
+               }
            }
 
          def all: Stream[F,Country] =
-           psAll.stream(Void, 64)
+             sess.prepare(countryQuery(Fragment.empty)).use { psAll =>
+               psAll.stream(Void, 64)
+             }
 
        }
 
      }
 
-   }
+     }
+
 
    /**
     * Given a `SocketGroup` we can construct a session resource, and from that construct a
@@ -114,14 +112,16 @@ import scala.concurrent.ExecutionContext.global
 //       parameters   = Session.DefaultConnectionParameters
 //     ).flatMap(countriesFromSession(_))
   //zuvor countriesFromSocketGroup
-   def singleSession[F[_]: Concurrent: Network : Console : Trace]: Resource[F, Countries[F]] =
-     Session.single[F](
+   def singleSession[F[_]: Monad : MonadThrow :  Concurrent: Network : Console : Trace ]: Resource[F, CountryService[F]] = {
+  val rs  =   Session.single[F](
        host = "localhost",
        port = 5432,
        user = "jimmy",
        password = Some("banana"),
        database = "world"
-     ).flatMap(countriesFromSession(_))
+     )
+    countriesFromSession(rs)
+}
 
 
    /** Resource yielding a pool of `Countries`, backed by a single `Blocker` and `SocketGroup`. */
@@ -132,7 +132,7 @@ import scala.concurrent.ExecutionContext.global
 //       pc  = countriesFromSocketGroup(sg)
 //       r  <- Pool.of(pc, 10)(pooledCountriesRecycler)
 //     } yield r.widen // forget we're a PooledCountries
-   def pool[F[_]: Concurrent: Network : Console : Trace]: Resource[F, Resource[F, Countries[F]]] =
+   def pool[F[_]: Concurrent: Network : Console : Trace]: Resource[F, Resource[F, CountryService[F]]] =
     Session.pooled[F](
       host = "localhost",
       port = 5432,
@@ -147,7 +147,7 @@ import scala.concurrent.ExecutionContext.global
 
    /** Given a pool of `Countries` we can create an `HttpRoutes`. */
    def countryRoutes[F[_]: Concurrent: Trace](
-     pool: Resource[F, Countries[F]]
+     pool: Resource[F, CountryService[F]]
    ): HttpRoutes[F] = {
      object dsl extends Http4sDsl[F]; import dsl._
      HttpRoutes.of[F] {
