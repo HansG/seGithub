@@ -76,8 +76,8 @@ object Dependencies {
     val redis4catsEffects  = "dev.profunktor" %% "redis4cats-effects"  % V.redis4cats
     val redis4catsLog4cats = "dev.profunktor" %% "redis4cats-log4cats" % V.redis4cats
 
-    val skunkCore  = "org.tpolecat" %% "skunk-core"  % V.skunk
-    val skunkCirce = "org.tpolecat" %% "skunk-circe" % V.skunk
+    val skunkCore  = "org.tpolecat" %% "skunk-core"  %  "0.3.2"
+    val skunkCirce = "org.tpolecat" %% "skunk-circe" % "0.3.2" //V.skunk
 
     // Runtime
     val logback = "ch.qos.logback" % "logback-classic" % V.logback

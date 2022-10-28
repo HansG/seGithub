@@ -5,30 +5,26 @@
 package shop.services
 
 import cats._
-import cats.effect.{Resource, _}
 import cats.effect.std.Console
+import cats.effect._
 import cats.syntax.all._
 import com.comcast.ip4s.IpLiteralSyntax
 import fs2.Stream
-import fs2.io.net.{Network, SocketGroup}
+import fs2.io.net.Network
 import io.circe.Encoder
 import io.circe.generic.semiauto.deriveEncoder
 import io.circe.syntax._
-import natchez.Trace.Implicits.noop
-import natchez.{EntryPoint, Trace}
-import org.http4s.{HttpApp, HttpRoutes}
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
+import org.http4s.ember.server.EmberServerBuilder
 import org.http4s.implicits._
+import org.http4s.server.middleware.{RequestLogger, ResponseLogger}
 import org.http4s.server.{Router, Server}
-import skunk.{Fragment, Query, Session, Void}
+import org.http4s.{HttpApp, HttpRoutes}
 import skunk.codec.text.{bpchar, varchar}
 import skunk.implicits._
-import org.http4s.ember.server.EmberServerBuilder
-import org.http4s.server.middleware.{RequestLogger, ResponseLogger}
-import skunk.util.Recycler
-
-import scala.concurrent.ExecutionContext.global
+import skunk.{Fragment, Query, Session, Void}
+import natchez.Trace
 
 /**
   * A small but complete web service that serves data from the `world` database and accumulates
@@ -58,19 +54,8 @@ object Http4sExample extends IOApp {
     def all: Resource[F, Stream[F, Country]]
   }
 
-  /**
-    * A refinement that provides a handle to the underlying session. We will use this to implement
-    * our pool recycler.
-    */
-  trait PooledCountries[F[_]] extends CountryService[F] {
-    def session: Session[F]
-  }
-
-  def pooledCountriesRecycler[F[_]: Monad]: Recycler[F, PooledCountries[F]] =
-    Session.Recyclers.minimal[F].contramap(_.session)
-
   /** Given a `Session` we can create a `Countries` resource with pre-prepared statements. */
-  def countriesFromSession[F[_]: Trace: Monad: MonadCancel[*[_], Throwable]](
+  def countriesFromSession[F[_]:  Monad: MonadCancel[*[_], Throwable]](
       pool: Resource[F, Session[F]]
   ): Resource[F, CountryService[F]] = {
 
@@ -80,39 +65,18 @@ object Http4sExample extends IOApp {
     pool.map { sess =>
       new CountryService[F] {
         def byCode(code: String): F[Option[Country]] =
-          Trace[F].span(s"""Country.byCode("$code")""") {
             sess.prepare(countryQuery(sql"WHERE code = ${bpchar(3)}")).use { psByCode =>
               psByCode.option(code)
-            }
           }
 
         def all: Resource[F, Stream[F, Country]] =
           sess.prepare(countryQuery(Fragment.empty)).map { psAll =>
             psAll.stream(Void, 64)
           }
-
       }
-
     }
-
   }
 
-  /**
-    * Given a `SocketGroup` we can construct a session resource, and from that construct a
-    * `Countries` resource.
-    */
-//   def countriesFromSocketGroup[F[_]: Concurrent: ContextShift: Trace](
-//     socketGroup: SocketGroup[F]
-//   ): Resource[F, PooledCountries[F]] =
-//     Session.fromSocketGroup(
-//       host         = "localhost",
-//       user         = "jimmy",
-//       database     = "world",
-//       password     = Some("banana"),
-//       socketGroup  = socketGroup,
-//       sslOptions   = None,
-//       parameters   = Session.DefaultConnectionParameters
-//     ).flatMap(countriesFromSession(_))
   //zuvor countriesFromSocketGroup
   def singleSession[F[_]: Monad: MonadThrow: Concurrent: Network: Console: Trace]: Resource[F, CountryService[F]] = {
     val rs = Session.single[F](
@@ -125,14 +89,6 @@ object Http4sExample extends IOApp {
     countriesFromSession(rs)
   }
 
-  /** Resource yielding a pool of `Countries`, backed by a single `Blocker` and `SocketGroup`. */
-//   def pool[F[_]: Concurrent: ContextShift: Trace]: Resource[F, Resource[F, Countries[F]]] =
-//     for {
-//       b  <- Blocker[F]
-//       sg <- fs2.io.net.SocketGroup[F[_]](b)
-//       pc  = countriesFromSocketGroup(sg)
-//       r  <- Pool.of(pc, 10)(pooledCountriesRecycler)
-//     } yield r.widen // forget we're a PooledCountries
   def resResService[F[_]: Concurrent: Network: Console: Trace]: Resource[F, Resource[F, CountryService[F]]] =
     Session
       .pooled[F](
@@ -148,7 +104,7 @@ object Http4sExample extends IOApp {
       .map(rs => countriesFromSession(rs))
 
   /** Given a pool of `Countries` we can create an `HttpRoutes`. */
-  def resRoutes[F[_]: Concurrent: Trace](
+  def resRoutes[F[_]: Concurrent ](
       pool: Resource[F, CountryService[F]]
   ): Resource[F, HttpRoutes[F]] = {
     object dsl extends Http4sDsl[F];
@@ -156,7 +112,6 @@ object Http4sExample extends IOApp {
     pool.map { countries =>
       HttpRoutes.of[F] {
         case GET -> Root / "country" / code =>
-          Trace[F].put("country" -> code) *> // add param to current span
             countries.byCode(code).flatMap {
               case Some(c) => Ok(c.asJson)
               case None    => NotFound(s"No country has code $code.")
@@ -164,7 +119,7 @@ object Http4sExample extends IOApp {
 
         case GET -> Root / "countries" =>
           countries.all.use { st =>
-            val stt = st.compile.toList.map(_.asJson)
+            val stt = st.compile.toList.map(_.asJson)//how to use stream directly in response??
             Ok(stt)
           }
       }
@@ -173,13 +128,13 @@ object Http4sExample extends IOApp {
 
 
 
-  def  httpApp[F[_]: Async: Console: Trace]( r : HttpRoutes[F]) :  HttpApp[F]  = {
-    def addLoggers[F[_]: Async](http: HttpApp[F]): HttpApp[F] = {
+  def  httpApp[F[_]: Async: Console ](routes : HttpRoutes[F]) :  HttpApp[F]  = {
+    def addLoggers(http: HttpApp[F]): HttpApp[F] = {
       val httpReq = RequestLogger.httpApp(true, true)(http)
       ResponseLogger.httpApp(true, true)(httpReq)
     }
 
-    addLoggers(Router("/" -> r).orNotFound)
+    addLoggers(Router("/" -> routes).orNotFound)
   }
 
   /** Given an `HttpApp` we can create a running `Server` resource. */
@@ -194,7 +149,7 @@ object Http4sExample extends IOApp {
       .build
 
   /** Our application as a resource. */
-  def runR[F[_]: Async: Console: Trace]: Resource[F, Unit] =
+  def runR[F[_]: Async: Console :Trace ]: Resource[F, Unit] =
     for {
       rrs <- resResService
       routes <-  resRoutes(rrs)
@@ -202,6 +157,7 @@ object Http4sExample extends IOApp {
       _  <- resServer(app)
     } yield ()
 
+  import natchez.Trace.Implicits.noop
   /** Main method instantiates `F` to `IO` and `use`s our resource forever. */
   def run(args: List[String]): IO[ExitCode] =
     runR[IO].use(_ => IO.never)

@@ -108,7 +108,6 @@ lazy val core = (project in file("modules/core"))
       "org.tpolecat" %% "natchez-core" % natchezVersion,
       "org.tpolecat" %% "natchez-jaeger" % natchezVersion,
       "org.tpolecat" %% "natchez-honeycomb" % natchezVersion,
-      "org.tpolecat" %% "natchez-jaeger" % natchezVersion,
         Libraries.catsLaws,
     Libraries.log4catsNoOp,
     Libraries.monocleLaw,
