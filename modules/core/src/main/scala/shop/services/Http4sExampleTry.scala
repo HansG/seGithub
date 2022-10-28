@@ -72,6 +72,7 @@ object Http4sExample extends IOApp {
     }
   }
 
+/*
   def resCountryService[F[_]: Monad: MonadThrow: Concurrent: Network: Console: Trace]
       : Resource[F, CountryService[F]] = {
     val resSession = Session.single[F](
@@ -83,6 +84,7 @@ object Http4sExample extends IOApp {
     )
     resCountryService(resSession)
   }
+*/
 
   /** Resource yielding a pool of `CountryService`, backed by a single `Blocker` and `SocketGroup`. */
   def resResCountryService[F[_]: Concurrent: Network: Console: Trace]: Resource[F, Resource[F, CountryService[F]]] =
@@ -122,7 +124,7 @@ object Http4sExample extends IOApp {
     }
   }
 
-  def toHttpApp[F[_]: Async: Console](routes: HttpRoutes[F]): HttpApp[F] = {
+  def httpAppFrom[F[_]: Async: Console](routes: HttpRoutes[F]): HttpApp[F] = {
     def addLoggers(http: HttpApp[F]): HttpApp[F] = {
       val httpReq = RequestLogger.httpApp(true, true)(http)
       ResponseLogger.httpApp(true, true)(httpReq)
@@ -143,16 +145,17 @@ object Http4sExample extends IOApp {
       .build
 
   /** Our application as a resource. */
-  def resServer[F[_]: Async: Console: Trace]: Resource[F, Unit] = {
-    val    rrs  = resResCountryService
-    val app =  rrs.map( rs => { val r = resRoutes(_);   toHttpApp(r)}  )
-    resServer(app)
-  }
+  def resServer[F[_]: Async: Console: Trace]: Resource[F, Unit] =
+    for {
+      rrs    <- resResCountryService
+      routes <- resRoutes(rrs)
+      app = httpAppFrom(routes)
+      _ <- resServer(app)
+    } yield ()
 
 
-
-  /** Main method instantiates `F` to `IO` and `use`s our resource forever. */
+    /** Main method instantiates `F` to `IO` and `use`s our resource forever. */
   def run(args: List[String]): IO[ExitCode] =
     resServer[IO].useForever
 
-}
+  }

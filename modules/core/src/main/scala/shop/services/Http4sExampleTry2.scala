@@ -46,11 +46,11 @@ object Http4sExample2 extends IOApp {
   /** A service interface and companion factory method. */
   trait CountryService[F[_]] {
     def byCode(code: String): F[Option[Country]]
-    def all: Resource[F, Stream[F, Country]]
+    def all:  F[Stream[F, Country]]
   }
 
   /** Given a `Session` we can create a `Countries` resource with pre-prepared statements. */
-  def resCountryService[F[_]: Monad: MonadCancel[*[_], Throwable]](
+  def countryServiceFrom[F[_]: Monad: MonadCancel[*[_], Throwable]](
       resSession: Resource[F, Session[F]]
   ): CountryService[F] = {
 
@@ -65,26 +65,16 @@ object Http4sExample2 extends IOApp {
             }
           }
 
-        def all: F[Stream[F, Country]] =
+        def all:  F[Stream[F, Country]] =
           resSession.use { sess =>
             sess.prepare(countryQuery(Fragment.empty)).use { psAll =>
-              psAll.stream(Void, 64)
+              Monad[F].pure( psAll.stream(Void, 64))
             }
           }
       }
   }
 
-  def resCountryService[F[_]: Monad: MonadThrow: Concurrent: Network: Console: Trace]
-      : Resource[F, Session[F]] =
-     Session.single[F](
-      host = "localhost",
-      port = 5432,
-      user = "jimmy",
-      password = Some("banana"),
-      database = "world"
-    )
-
-
+  
   /** Resource yielding a pool of `CountryService`, backed by a single `Blocker` and `SocketGroup`. */
   def resResSession[F[_]: Concurrent: Network: Console: Trace]: Resource[F, Resource[F, Session[F]]] =
     Session
@@ -100,7 +90,7 @@ object Http4sExample2 extends IOApp {
       )
 
   /** Given a pool of `Countries` we can create an `HttpRoutes`. */
-  def resRoutes[F[_]: Concurrent](
+  def routesFrom[F[_]: Concurrent](
                                    countries: CountryService[F]
   ): HttpRoutes[F] = {
     object dsl extends Http4sDsl[F];
@@ -113,14 +103,14 @@ object Http4sExample2 extends IOApp {
           }
 
         case GET -> Root / "countries" =>
-          countries.all.use { st =>
+          countries.all.flatMap { st =>
             val stt = st.compile.toList.map(_.asJson)
             Ok(stt)
           }
       }
   }
 
-  def toHttpApp[F[_]: Async: Console](routes: HttpRoutes[F]): HttpApp[F] = {
+  def httpAppFrom[F[_]: Async: Console](routes: HttpRoutes[F]): HttpApp[F] = {
     def addLoggers(http: HttpApp[F]): HttpApp[F] = {
       val httpReq = RequestLogger.httpApp(true, true)(http)
       ResponseLogger.httpApp(true, true)(httpReq)
@@ -141,13 +131,15 @@ object Http4sExample2 extends IOApp {
       .build
 
   /** Our application as a resource. */
-  def resServer[F[_]: Async: Console: Trace]: Resource[F, Unit] =
-    for {
-      rrs    <- resResSession
-      routes = resRoutes(rrs)
-      app = toHttpApp(routes)
-      _ <- resServer(app)
-    } yield ()
+
+  def resServer[F[_]: Async: Console: Trace]: Resource[F, Server] =
+    resResSession.map { rs =>
+      val cs = countryServiceFrom(rs)
+      val r = routesFrom(cs)
+      httpAppFrom(r)
+    } flatMap { app =>
+      resServer(app)
+    }
 
   /** Main method instantiates `F` to `IO` and `use`s our resource forever. */
   def run(args: List[String]): IO[ExitCode] =
