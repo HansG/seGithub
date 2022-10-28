@@ -11,8 +11,8 @@ ThisBuild / scalafixDependencies += Libraries.organizeImports
 resolvers += Resolver.sonatypeRepo("snapshots")
 resolvers += Resolver.mavenCentral
 resolvers += "mvnrepository" at "https://mvnrepository.com/artifact"
-resolvers += "Local Maven Repository" at "file://D:/se/m2/repository"
-//resolvers += "Local Maven Repository" at "file://"+Path.userHome.absolutePath+"/.m2/repository"
+//resolvers += "Local Maven Repository" at "file://D:/se/m2/repository"
+resolvers += "Local Maven Repository" at "file://"+Path.userHome.absolutePath+"/.m2/repository"
 
 
 
