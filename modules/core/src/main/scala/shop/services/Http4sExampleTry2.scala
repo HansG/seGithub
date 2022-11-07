@@ -70,6 +70,9 @@ object Http4sExample2 extends IOApp {
             sess.prepare(countryQuery(Fragment.empty)).use { psAll =>
               Monad[F].pure( psAll.stream(Void, 64))
             }
+          }.onError {
+            case ex:Exception  => Monad[F].pure(println(ex.toString))
+            case e => Monad[F].pure(println(e.toString))
           }
       }
   }
