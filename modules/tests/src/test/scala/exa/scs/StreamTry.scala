@@ -7,12 +7,16 @@ import fs2.concurrent.SignallingRef
 import scala.concurrent.duration.DurationInt
 import scala.util.Random
 import cats.effect.unsafe.implicits.global
+import scala.concurrent.duration._
+import munit.{CatsEffectSuite, ScalaCheckEffectSuite}
+import cats.effect.testkit.TestControl
 
 
 /*
-Besser als Worksheet: nur ausgewähltes läuft, kein Rebuild Projekt nötig, damit imports in Worksheet funktionieren
+Besser IOApp als Worksheet: nur ausgewähltes läuft, kein Rebuild Projekt nötig, damit imports in Worksheet funktionieren
 
 nur ausgewähltes läuft: Probieren!! ->
+"
 package upperbound
 
 import scala.concurrent.ExecutionContext
@@ -36,8 +40,10 @@ class LimiterSuite extends BaseSuite {
   }
   ....
 }
+"
  */
-object StreamTry extends IOApp {
+//object StreamTry extends IOApp {
+class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
   def writeToSocket[F[_]: Async](chunk: Chunk[String]): F[Unit] =
     Async[F].async { callback =>
@@ -94,11 +100,27 @@ object StreamTry extends IOApp {
     .onFinalize(IO.println("pong"))
 
 
+   val data: Stream[IO,Int] = {
+     Stream.range(1, 10).covary[IO].metered(1.seconds)
+   }
+   val stSig = Stream.eval(fs2.concurrent.SignallingRef[IO,Int](0)).flatMap(s =>
+     Stream(s).concurrently(data.evalMap(s.set))).flatMap(_.discrete).debug().takeWhile(_ < 7, true)
+    // .compile.last.unsafeRunSync()
+
 
   val aktw = stpwrite
   val aktp = stpause
   val akti = stinterrupt
 
 
-  override def run(args: List[String]): IO[ExitCode] = akti.compile.drain.as(ExitCode.Success)
+  def run(prog : IO[_]) =
+    TestControl.executeEmbed(prog).map { r =>
+      assertEquals(true, true)
+    }
+
+  test("run Stream Signal") {
+    run(stSig.compile.drain)
+  }
+
+
 }

@@ -15,6 +15,11 @@ resolvers += "mvnrepository" at "https://mvnrepository.com/artifact"
 resolvers += "Local Maven Repository" at "file://"+Path.userHome.absolutePath+"/.m2/repository"
 
 
+def dep(org: String, prefix: String, version: String)(modules: String*)(testModules: String*) =
+  modules.map(m => org %% (prefix ++ m) % version) ++
+    testModules.map(m => org %% (prefix ++ m) % version) //% Test
+
+
 
 val scalafixCommonSettings = inConfig(IntegrationTest)(scalafixConfigSettings(IntegrationTest))
 lazy val root = (project in file("."))
@@ -29,6 +34,7 @@ lazy val tests = (project in file("modules/tests"))
     name := "shopping-cart-test-suite",
     scalacOptions ++= List("-Ymacro-annotations", "-Yrangepos", "-Wconf:cat=unused:info"),
     testFrameworks += new TestFramework("weaver.framework.CatsEffect"),
+    testFrameworks += new TestFramework("munit.Framework"),
     Defaults.itSettings,
     scalafixCommonSettings,
     libraryDependencies ++= Seq(
@@ -43,7 +49,11 @@ lazy val tests = (project in file("modules/tests"))
       Libraries.weaverDiscipline,
       Libraries.logback % Runtime,
       Libraries.weaverScalaCheck
-    )
+    ) ++
+      dep("org.typelevel", "cats-effect", "3.3.11")("")("-laws", "-testkit") ++
+      dep("org.scalameta", "munit", "0.7.29")()("", "-scalacheck") ++
+      dep("org.typelevel", "", "1.0.7")()("munit-cats-effect-3") ++
+      dep("org.typelevel",  "scalacheck-effect", "1.0.3")()("", "-munit")
   )
   .dependsOn(core)
 
