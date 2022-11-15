@@ -60,6 +60,13 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
     .covary[IO]
     .parEvalMapUnordered(10)(writeToSocket[IO])
 
+  test("run  Stream parEvalMapUnordered  chunkN ") {
+    run(stpwrite.compile.drain)
+  }
+
+
+
+
   val stinterrupt = Stream
     .eval(Deferred[IO, Either[Throwable, Unit]])
     .flatMap { switch =>
@@ -74,6 +81,10 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
         .onFinalize(IO.println("Interrupted!"))
     }
     .void
+
+  test("run  Stream interruptWhen  Deferred complete  ") {
+    run(stinterrupt.compile.drain)
+  }
 
 
  val stpause =  Stream
@@ -99,18 +110,23 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
     .interruptAfter(10.seconds)
     .onFinalize(IO.println("pong"))
 
+  test("run  Stream pauseWhen SignallingRef  ") {
+    run(stpause.compile.drain)
+  }
 
-   val data: Stream[IO,Int] = {
+
+  val data: Stream[IO,Int] = {
      Stream.range(1, 10).covary[IO].metered(1.seconds)
    }
    val stSig = Stream.eval(fs2.concurrent.SignallingRef[IO,Int](0)).flatMap(s =>
      Stream(s).concurrently(data.evalMap(s.set))).flatMap(_.discrete).debug().takeWhile(_ < 7, true)
     // .compile.last.unsafeRunSync()
 
+  test("run SignallingRef discrete stream") {
+    run(stSig.compile.drain)
+  }
 
-  val aktw = stpwrite
-  val aktp = stpause
-  val akti = stinterrupt
+
 
 
   def run(prog : IO[_]) =
@@ -118,9 +134,6 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
       assertEquals(true, true)
     }
 
-  test("run Stream Signal") {
-    run(stSig.compile.drain)
-  }
 
 
 }
