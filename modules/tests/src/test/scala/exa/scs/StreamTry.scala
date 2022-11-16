@@ -61,7 +61,7 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
     .parEvalMapUnordered(10)(writeToSocket[IO])
 
   test("run  Stream parEvalMapUnordered  chunkN ") {
-    run(stpwrite.compile.drain)
+    runStream(stpwrite)
   }
 
 
@@ -83,7 +83,7 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
     .void
 
   test("run  Stream interruptWhen  Deferred complete  ") {
-    run(stinterrupt.compile.drain)
+    runStream(stinterrupt)
   }
 
 
@@ -111,7 +111,7 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
     .onFinalize(IO.println("pong"))
 
   test("run  Stream pauseWhen SignallingRef  ") {
-    run(stpause.compile.drain)
+    runStream(stpause)
   }
 
 
@@ -123,14 +123,22 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
     // .compile.last.unsafeRunSync()
 
   test("run SignallingRef discrete stream") {
-    run(stSig.compile.drain)
+    runStream(stSig)
+  }
+
+
+  val parEvalSt = Stream(1,2,3,4,6,7,8,9).covary[IO].parEvalMapUnordered(2)(i => IO.sleep(Random.nextInt(2).seconds) *> IO(println(i)))
+  test("run parEvalMapUnordered") {
+    runStream0(parEvalSt)
   }
 
 
 
+  def runStream0(stream : Stream[IO,_] ) =
+    stream.compile.drain .map { r =>  assertEquals(true, true) }
 
-  def run(prog : IO[_]) =
-    TestControl.executeEmbed(prog).map { r =>
+  def runStream(stream : Stream[IO,_] ) =
+    TestControl.executeEmbed(stream.compile.drain).map { r =>
       assertEquals(true, true)
     }
 
