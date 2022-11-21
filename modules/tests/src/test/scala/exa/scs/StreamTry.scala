@@ -1,46 +1,20 @@
+package exa.scs
+
 import cats.effect.kernel.Deferred
-import cats.effect.{Async, ExitCode, IO, IOApp, Sync}
-import cats.implicits.{catsSyntaxApplicativeByName, catsSyntaxEitherId, toFunctorOps}
+import cats.effect.std.Supervisor
+import cats.effect.testkit.TestControl
+import cats.effect.{Async, IO, Sync}
+import cats.implicits.catsSyntaxEitherId
 import fs2._
 import fs2.concurrent.SignallingRef
+import munit.{CatsEffectSuite, ScalaCheckEffectSuite}
 
 import scala.concurrent.duration.DurationInt
 import scala.util.Random
-import cats.effect.unsafe.implicits.global
-import scala.concurrent.duration._
-import munit.{CatsEffectSuite, ScalaCheckEffectSuite}
-import cats.effect.testkit.TestControl
 
 
 /*
 Besser IOApp als Worksheet: nur ausgewähltes läuft, kein Rebuild Projekt nötig, damit imports in Worksheet funktionieren
-
-nur ausgewähltes läuft: Probieren!! ->
-"
-package upperbound
-
-import scala.concurrent.ExecutionContext
-import munit.{CatsEffectSuite, ScalaCheckEffectSuite}
-
-abstract class BaseSuite extends CatsEffectSuite with ScalaCheckEffectSuite {
-  override val munitExecutionContext: ExecutionContext = ExecutionContext.global
-}
-
-class LimiterSuite extends BaseSuite {
-..
-  test("submit semantics should return the result of the submitted job") {
-    IO.ref(false)
-      .flatMap { complete =>
-        ..
-      }
-      .map { case (res, state) =>
-        assertEquals(res, "done")
-        assertEquals(state, true)
-      }
-  }
-  ....
-}
-"
  */
 //object StreamTry extends IOApp {
 class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
@@ -66,7 +40,6 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
 
 
-
   val stinterrupt = Stream
     .eval(Deferred[IO, Either[Throwable, Unit]])
     .flatMap { switch =>
@@ -80,14 +53,14 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
         .interruptWhen(switch)
         .onFinalize(IO.println("Interrupted!"))
     }
-    .void
+
 
   test("run  Stream interruptWhen  Deferred complete  ") {
     runStream(stinterrupt)
   }
 
 
- val stpause =  Stream
+  val stpause =  Stream
     .eval(SignallingRef[IO, Boolean](false))
     .flatMap { signal =>
       val src =
@@ -116,11 +89,11 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
 
   val data: Stream[IO,Int] = {
-     Stream.range(1, 10).covary[IO].metered(1.seconds)
-   }
-   val stSig = Stream.eval(fs2.concurrent.SignallingRef[IO,Int](0)).flatMap(s =>
-     Stream(s).concurrently(data.evalMap(s.set))).flatMap(_.discrete).debug().takeWhile(_ < 7, true)
-    // .compile.last.unsafeRunSync()
+    Stream.range(1, 10).covary[IO].metered(1.seconds)
+  }
+  val stSig = Stream.eval(fs2.concurrent.SignallingRef[IO,Int](0)).flatMap(s =>
+    Stream(s).concurrently(data.evalMap(s.set))).flatMap(_.discrete).debug().takeWhile(_ < 7, true)
+  // .compile.last.unsafeRunSync()
 
   test("run SignallingRef discrete stream") {
     runStream(stSig)
@@ -132,6 +105,9 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
     runStream0(parEvalSt)
   }
 
+  test("run parEvalMapUnordered") {
+    supervised(parEvalSt.compile.drain)
+  }
 
 
   def runStream0(stream : Stream[IO,_] ) =
@@ -140,6 +116,11 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
   def runStream(stream : Stream[IO,_] ) =
     TestControl.executeEmbed(stream.compile.drain).map { r =>
       assertEquals(true, true)
+    }
+
+  def supervised[A](fa : IO[A] ) =
+    Supervisor[IO].use {   sp =>
+          sp.supervise(fa).void
     }
 
 
