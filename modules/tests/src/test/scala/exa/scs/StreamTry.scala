@@ -42,9 +42,10 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
   val stinterrupt = Stream
     .eval(Deferred[IO, Either[Throwable, Unit]])
-    .flatMap { switch =>
+    .evalMap( switch => Random.scalaUtilRandom[IO].map(r => (switch, r)) )
+    .flatMap {  case (switch, rand) =>
       Stream
-        .repeatEval(IO(Random.nextInt(5)))
+        .repeatEval(rand.betweenInt(0,5))
         .metered(1.second)
         .evalTap(IO.println)
         .evalTap { n =>
