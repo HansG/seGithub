@@ -10,7 +10,7 @@ import fs2.concurrent.SignallingRef
 import munit.{CatsEffectSuite, ScalaCheckEffectSuite}
 
 import scala.concurrent.duration.DurationInt
-import scala.util.Random
+import cats.effect.std.Random
 
 
 /*
@@ -48,7 +48,7 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
         .metered(1.second)
         .evalTap(IO.println)
         .evalTap { n =>
-          switch.complete(().asRight).void.whenA(n == 4)
+          if(n == 4) switch.complete(().asRight).void  else IO.unit
         }
         .interruptWhen(switch)
         .onFinalize(IO.println("Interrupted!"))
@@ -99,27 +99,75 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
     runStream(stSig)
   }
 
+  def slprint(i:Any, rand: Random[IO[*]]) = rand.betweenInt(100, 3000).flatMap(d => IO.sleep(d.milliseconds)) *> IO(println(i))
 
-  val parEvalSt = Stream(1,2,3,4,6,7,8,9).covary[IO].parEvalMapUnordered(2)(i => IO.sleep(Random.nextInt(2).seconds) *> IO(println(i)))
-  test("run parEvalMapUnordered") {
+  val parEvalSt = Stream(1,2,3,4,6,7,8,9).covary[IO].parEvalMapUnordered(2)(i => Random.scalaUtilRandom[IO].flatMap(r =>  slprint(i, r)) )
+  test("run parEvalMapUnordered IO") {
     runStream0(parEvalSt)
   }
+  test("run parEvalMapUnordered executeEmbed") {
+    runStream(parEvalSt)
+  }
 
-  test("run parEvalMapUnordered") {
+  test("run parEvalMapUnordered supervised") {
     supervised(parEvalSt.compile.drain)
   }
 
 
+  test("run slprint") {
+  //  supervised(
+      for {
+        rand <- Random.scalaUtilRandom[IO]
+        eng <- slprint ("Hello", rand).foreverM.start
+        fr <- slprint ("Bonjour", rand).foreverM.start
+        sp <- slprint ("Hola", rand).foreverM.start
+
+        _ <- IO.sleep(15.seconds)
+        _ <- eng.cancel >> fr.cancel >> sp.cancel
+
+      } yield ((eng, fr, sp))
+ //   )
+  }
+
+
+  def sleepPrint(word: String, name: String, rand: Random[IO[*]]) =
+    for {
+      delay <- rand.betweenInt(200, 700)
+      _     <- IO.sleep(delay.millis)
+      _     <- IO.println(s"$word, $name")
+    } yield ()
+
+  val run =
+    for {
+      rand <- Random.scalaUtilRandom[IO]
+
+      // try uncommenting first one locally! Scastie doesn't like System.in
+      name <- IO.print("Enter your name: ") >> IO.readLine
+      //name <- IO.pure("Daniel")
+
+      english <- sleepPrint("Hello", name, rand).foreverM.start
+      french  <- sleepPrint("Bonjour", name, rand).foreverM.start
+      spanish <- sleepPrint("Hola", name, rand).foreverM.start
+
+      _ <- IO.sleep(5.seconds)
+      _ <- english.cancel >> french.cancel >> spanish.cancel
+    } yield ()
+
+
+
+
   def runStream0(stream : Stream[IO,_] ) =
-    stream.compile.drain .map { r =>  assertEquals(true, true) }
+    stream.compile.drain .map { r =>  assertEquals(true, true) } //println erscheint
 
   def runStream(stream : Stream[IO,_] ) =
-    TestControl.executeEmbed(stream.compile.drain).map { r =>
+    TestControl.executeEmbed(stream.compile.drain).map { r => //println erscheint
       assertEquals(true, true)
     }
 
+  def testControled[A](fa : IO[A]) = TestControl.executeEmbed(fa)
+
   def supervised[A](fa : IO[A] ) =
-    Supervisor[IO].use {   sp =>
+    Supervisor[IO].use {   sp =>    //println erscheint  nicht !!!
           sp.supervise(fa).void
     }
 

@@ -1,4 +1,5 @@
 import Dependencies._
+import sbt.Keys.scalacOptions
 
 ThisBuild / scalaVersion := "2.13.8"
 ThisBuild / version := "2.0.0"
@@ -19,7 +20,7 @@ def dep(org: String, prefix: String, version: String)(modules: String*)(testModu
   modules.map(m => org %% (prefix ++ m) % version) ++
     testModules.map(m => org %% (prefix ++ m) % version) //% Test
 
-
+addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.13.2" cross CrossVersion.full)
 
 val scalafixCommonSettings = inConfig(IntegrationTest)(scalafixConfigSettings(IntegrationTest))
 lazy val root = (project in file("."))
@@ -50,7 +51,7 @@ lazy val tests = (project in file("modules/tests"))
       Libraries.logback % Runtime,
       Libraries.weaverScalaCheck
     ) ++
-      dep("org.typelevel", "cats-effect", "3.3.11")("")("-laws", "-testkit") ++
+      dep("org.typelevel", "cats-effect", "3.3.12")("")("-laws", "-testkit") ++
       dep("org.scalameta", "munit", "0.7.29")()("", "-scalacheck") ++
       dep("org.typelevel", "", "1.0.7")()("munit-cats-effect-3") ++
       dep("org.typelevel",  "scalacheck-effect", "1.0.3")()("", "-munit")
@@ -67,7 +68,7 @@ lazy val core = (project in file("modules/core"))
   .settings(
     name := "shopping-cart-core",
     Docker / packageName := "shopping-cart",
-    scalacOptions ++= List("-Ymacro-annotations", "-Yrangepos", "-Wconf:cat=unused:info"),
+    scalacOptions ++= List("-Ymacro-annotations", "-Yrangepos", "-Wconf:cat=unused:info", "-language:higherKinds", "-Ydelambdafy:inline"),
     scalafmtOnCompile := true,
     resolvers += Resolver.sonatypeRepo("snapshots"),
     Defaults.itSettings,
