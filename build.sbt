@@ -21,6 +21,7 @@ def dep(org: String, prefix: String, version: String)(modules: String*)(testModu
     testModules.map(m => org %% (prefix ++ m) % version) //% Test
 
 addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.13.2" cross CrossVersion.full)
+addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
 
 val scalafixCommonSettings = inConfig(IntegrationTest)(scalafixConfigSettings(IntegrationTest))
 lazy val root = (project in file("."))

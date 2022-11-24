@@ -3,14 +3,15 @@ package exa.scs
 import cats.effect.kernel.Deferred
 import cats.effect.std.Supervisor
 import cats.effect.testkit.TestControl
-import cats.effect.{Async, IO, Sync}
+import cats.effect.{Async, ExitCode, IO, IOApp, Ref, Sync}
 import cats.implicits.catsSyntaxEitherId
 import fs2._
 import fs2.concurrent.SignallingRef
 import munit.{CatsEffectSuite, ScalaCheckEffectSuite}
 
-import scala.concurrent.duration.DurationInt
+import scala.concurrent.duration.{DurationDouble, DurationInt}
 import cats.effect.std.Random
+import exa.scs.TestWithIOApp.incr
 
 
 /*
@@ -61,7 +62,7 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
   }
 
 
-  val stpause =  Stream
+  val stpause =  Stream   //qcash test!??
     .eval(SignallingRef[IO, Boolean](false))
     .flatMap { signal =>
       val src =
@@ -85,7 +86,7 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
     .onFinalize(IO.println("pong"))
 
   test("run  Stream pauseWhen SignallingRef  ") {
-    runStream(stpause)
+    runStream0(stpause)
   }
 
 
@@ -131,29 +132,6 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
   }
 
 
-  def sleepPrint(word: String, name: String, rand: Random[IO[*]]) =
-    for {
-      delay <- rand.betweenInt(200, 700)
-      _     <- IO.sleep(delay.millis)
-      _     <- IO.println(s"$word, $name")
-    } yield ()
-
-  val run =
-    for {
-      rand <- Random.scalaUtilRandom[IO]
-
-      // try uncommenting first one locally! Scastie doesn't like System.in
-      name <- IO.print("Enter your name: ") >> IO.readLine
-      //name <- IO.pure("Daniel")
-
-      english <- sleepPrint("Hello", name, rand).foreverM.start
-      french  <- sleepPrint("Bonjour", name, rand).foreverM.start
-      spanish <- sleepPrint("Hola", name, rand).foreverM.start
-
-      _ <- IO.sleep(5.seconds)
-      _ <- english.cancel >> french.cancel >> spanish.cancel
-    } yield ()
-
 
 
 
@@ -175,3 +153,10 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
 
 }
+
+
+
+
+
+
+
