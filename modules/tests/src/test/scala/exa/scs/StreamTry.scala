@@ -11,7 +11,6 @@ import munit.{CatsEffectSuite, ScalaCheckEffectSuite}
 
 import scala.concurrent.duration.{DurationDouble, DurationInt}
 import cats.effect.std.Random
-import exa.scs.TestWithIOApp.incr
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalacheck.effect.PropF
 import shop.domain.order.PaymentId
