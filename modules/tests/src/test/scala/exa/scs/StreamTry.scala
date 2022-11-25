@@ -12,6 +12,11 @@ import munit.{CatsEffectSuite, ScalaCheckEffectSuite}
 import scala.concurrent.duration.{DurationDouble, DurationInt}
 import cats.effect.std.Random
 import exa.scs.TestWithIOApp.incr
+import org.scalacheck.{Arbitrary, Gen}
+import org.scalacheck.effect.PropF
+import shop.domain.order.PaymentId
+
+import java.util.UUID
 
 
 /*
@@ -19,6 +24,25 @@ Besser IOApp als Worksheet: nur ausgewähltes läuft, kein Rebuild Projekt nöti
  */
 //object StreamTry extends IOApp {
 class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
+
+  def idGen[A](f: UUID => A): Gen[A] =
+    Gen.uuid.map(f)
+
+/*
+*/
+  implicit lazy val paymentIdGen: Gen[PaymentId] =
+    idGen(PaymentId.apply)
+
+  implicit def arbA[A](implicit GA: Gen[A]): Arbitrary[A] = Arbitrary { GA }
+
+  test("first PropF test") {
+    PropF.forAllF { (x: PaymentId) =>
+      IO(x).start.flatMap(_.join).map(res => {println(s"$x - $res"); assert(true)}   )
+    }
+  }
+
+
+
 
   def writeToSocket[F[_]: Async](chunk: Chunk[String]): F[Unit] =
     Async[F].async { callback =>

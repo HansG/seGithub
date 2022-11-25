@@ -10,7 +10,7 @@ object TestWithIOApp extends IOApp {
 
   def poll(ref: Ref[IO, Int], sl: Int) = IO.sleep(sl.second) >> ref.get.flatMap(c => IO.println(s"Poller $sl: $c"))
 
-  override def run(args: List[String]): IO[ExitCode] = run2.as(ExitCode.Success)
+  override def run(args: List[String]): IO[ExitCode] = run1.as(ExitCode.Success)
 
   val run1 = for {
     ref <- IO.ref(0)

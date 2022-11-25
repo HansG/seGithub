@@ -16,22 +16,21 @@ object WeaverIOSuiteTry extends SimpleIOSuite {
 
   def poll(ref: Ref[IO, Int], sl: Int) = IO.sleep(sl.second) >> ref.get.flatMap(c => IO.println(s"Poller $sl: $c"))
 
-  override def run(args: List[String]): IO[ExitCode] = run2.as(ExitCode.Success)
+  //override def run(args: List[String]): IO[ExitCode] = run1.as(ExitCode.Success)
 
-  val run1 = for {
-    ref <- IO.ref(0)
-    i <- incr(ref).foreverM.start
-    p1 <- poll(ref, 1).foreverM.start
-    p2 <- poll(ref, 2).foreverM.start
-    p3 <- poll(ref, 3).foreverM.start
+
+  test(" ref ") {
+    for {
+      ref <- IO.ref(0)
+      i <- incr(ref).foreverM.start
+      p1 <- poll(ref, 1).foreverM.start
+      p2 <- poll(ref, 2).foreverM.start
+      p3 <- poll(ref, 3).foreverM.start
+    } yield expect(p2 == p1)
   }
 
 
-
-
-
-
-    test("UUID is random") {
+  test(" UUID ") {
     for {
       u1 <- uuid
       u2 <- uuid
