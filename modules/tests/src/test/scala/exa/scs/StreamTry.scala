@@ -36,7 +36,7 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
   test("first PropF test") {
     PropF.forAllF { (x: PaymentId) =>
-      IO(x).start.flatMap(_.join).map(res => {println(s"$x - $res"); assert(true)}   )
+      IO(x).start.flatMap(_.join).map(res => {println(s"$x - $res"); assert(true)} )
     }
   }
 

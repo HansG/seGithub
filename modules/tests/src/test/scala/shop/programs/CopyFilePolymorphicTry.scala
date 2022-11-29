@@ -9,7 +9,7 @@ import java.io._
  * Simple IO-based program to copy files. First part of cats-effect tutorial
  * at https://typelevel.org/cats-effect/tutorial/tutorial.html.
  */
-object CopyFilePolymorphic extends IOApp { //cancel z.B. per ctrl-C
+object CopyFilePolymorphicTry extends IOApp { //cancel z.B. per ctrl-C
 
   def transmit[F[_]: Sync](origin: InputStream, destination: OutputStream, buffer: Array[Byte], acc: Long): F[Long] =
     for {
