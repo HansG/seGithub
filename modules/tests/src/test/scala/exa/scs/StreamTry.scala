@@ -3,7 +3,7 @@ package exa.scs
 import cats.effect.kernel.Deferred
 import cats.effect.std.Supervisor
 import cats.effect.testkit.TestControl
-import cats.effect.{Async, ExitCode, IO, IOApp, Ref, Sync}
+import cats.effect.{Async, ExitCode, IO, IOApp, LiftIO, Ref, Sync}
 import cats.implicits.catsSyntaxEitherId
 import fs2._
 import fs2.concurrent.SignallingRef
@@ -23,6 +23,20 @@ Besser IOApp als Worksheet: nur ausgewähltes läuft, kein Rebuild Projekt nöti
  */
 //object StreamTry extends IOApp {
 class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
+  def runStream0(stream : Stream[IO,_] ) =
+    stream.compile.drain .map { r =>  assertEquals(true, true) } //println erscheint
+
+  def runStream(stream : Stream[IO,_] ) =
+    TestControl.executeEmbed(stream.compile.drain).map { r => //println erscheint
+      assertEquals(true, true)
+    }
+
+  def testControled[A](fa : IO[A]) = TestControl.executeEmbed(fa)
+
+  def supervised[A](fa : IO[A] ) =
+    Supervisor[IO].use {   sp =>    //println erscheint  nicht !!!
+      sp.supervise(fa).void
+    }
 
   def idGen[A](f: UUID => A): Gen[A] =
     Gen.uuid.map(f)
@@ -62,6 +76,48 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
     runStream(stpwrite)
   }
 
+
+  //https://www.beyondthelines.net/programming/streaming-patterns-with-fs2/
+  def writeToDatabase[F[_]: Async](chunk: Chunk[Int]): F[Unit] =
+    Async[F].async { callback =>
+      println(s"Writing batch of $chunk to database by ${Thread.currentThread().getName}")
+      callback(Right(()))
+      Sync[F].delay(Some(Sync[F].delay(())))
+    }
+
+  test("run  Stream chunkN(10) ") {
+    runStream(
+      Stream.emits(1 to 1000)
+      .chunkN(10)
+      .covary[IO]
+      .parEvalMap(10)(writeToDatabase[IO])
+    )
+  }
+
+  def pipe[F[_] : Sync](name: String): Stream[F, Int] => Stream[F, Int] = {
+    _.evalTap { index =>
+      Sync[F].delay(
+        println(s"Stage $name processing $index by ${Thread.currentThread().getName}")
+      )
+    }
+    //todo!!!
+  }
+
+  def pipeAsync[F[_]: Async : Sync](name: String): Stream[F, Int] => Stream[F, Int] =
+    _.evalTap { index =>
+      Async[F].async { (cb : (Either[Throwable, Int] => Unit) ) =>
+      IO(println(s"Stage $name processing $index by ${Thread.currentThread().getName}"))
+        Sync[F].delay(Some(Sync[F].delay(())))
+      }
+    }
+
+  test("run  Stream pipe ABC ") {
+  Stream.emits(1 to 1000)
+    .covary[IO]
+    .through(pipe("A"))
+    .through(pipe("B"))
+    .through(pipe("C"))
+  }
 
 
   val stinterrupt = Stream
@@ -158,20 +214,6 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
 
 
-  def runStream0(stream : Stream[IO,_] ) =
-    stream.compile.drain .map { r =>  assertEquals(true, true) } //println erscheint
-
-  def runStream(stream : Stream[IO,_] ) =
-    TestControl.executeEmbed(stream.compile.drain).map { r => //println erscheint
-      assertEquals(true, true)
-    }
-
-  def testControled[A](fa : IO[A]) = TestControl.executeEmbed(fa)
-
-  def supervised[A](fa : IO[A] ) =
-    Supervisor[IO].use {   sp =>    //println erscheint  nicht !!!
-          sp.supervise(fa).void
-    }
 
 
 
