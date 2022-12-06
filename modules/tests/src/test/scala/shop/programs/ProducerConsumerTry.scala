@@ -14,7 +14,7 @@ import scala.concurrent.duration.DurationInt
   *
   * Second part of cats-effect tutorial at https://typelevel.org/cats-effect/tutorial/tutorial.html
   */
-object ProducerConsumerTry {
+object ProducerConsumerTry  extends IOApp {
 
   import cats.effect.{ Async, Deferred, Ref }
   import cats.effect.std.Console
@@ -44,6 +44,10 @@ object ProducerConsumerTry {
       _ <- consumer(id, stateR)
     } yield ()
 
+
+
+
+
   }
 
   def producer[F[_]: Sync: Console](id: Int, counterR: Ref[F, Int], stateR: Ref[F, State[F, Int]]): F[Unit] = {
@@ -67,7 +71,18 @@ object ProducerConsumerTry {
   }
 
 
-
+  override def run(args: List[String]): IO[ExitCode] =
+    for {
+      stateR <- Ref.of[IO, State[IO,Int]](State(Queue.empty[Int], Queue.empty[Deferred[IO, Int]])  )
+      counterR <- Ref.of[IO, Int](1)
+      producers = List.range(1, 11).map(producer(_, counterR, stateR)) // 10 producers
+      consumers = List.range(1, 11).map(consumer(_, stateR))           // 10 consumers
+      res <- (producers ++ consumers)
+        .parSequence.as(ExitCode.Success) // Run producers and consumers in parallel until done (likely by user cancelling with CTRL-C)
+        .handleErrorWith { t =>
+          Console[IO].errorln(s"Error caught: ${t.getMessage}").as(ExitCode.Error)
+        }
+    } yield res
 
 
   import java.util.concurrent.{Executors, TimeUnit}

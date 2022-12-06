@@ -4,7 +4,7 @@ import cats.effect._
 import cats.effect.std.{ Semaphore, Supervisor }
 
 
-object RegionsX extends IOApp.Simple {
+object SemaphoreTry extends IOApp.Simple {
   def randomSleep: IO[Unit] =
     IO(scala.util.Random.nextInt(100)).flatMap { ms  =>
       IO.sleep((ms + 700).millis)
