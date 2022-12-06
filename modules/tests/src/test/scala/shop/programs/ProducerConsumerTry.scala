@@ -54,7 +54,7 @@ object ProducerConsumerTry {
           takers.dequeueOption.fold {
             (State(queue.enqueue(i), takers), Sync[F].unit)
           } {
-            case (deff, ntakers) => (State(queue, ntakers), deff.complete(i).void)
+            case (taker, ntakers) => (State(queue, ntakers), taker.complete(i).void)
           }
       }.flatten
 
@@ -65,6 +65,20 @@ object ProducerConsumerTry {
       _ <- producer(id, counterR, stateR)
     } yield ()
   }
+
+
+
+
+
+  import java.util.concurrent.{Executors, TimeUnit}
+  val scheduler = Executors.newScheduledThreadPool(1)
+  def delay_(millis : Long) =
+    IO.async_[Unit] { cb =>
+      scheduler.schedule(new Runnable {
+        def run = cb(Right(()))
+      }, millis, TimeUnit.MILLISECONDS)
+      ()
+    }
 
 }
 
