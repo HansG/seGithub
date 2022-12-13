@@ -21,20 +21,23 @@ object ProducerConsumerTry  extends IOApp {
   import cats.syntax.all._
   import scala.collection.immutable.Queue
 
-  case class State[F[_], A](queue: Queue[A], takers: Queue[Deferred[F, A]])
-  case class State1[F[_], A](queue: Queue[A], capacity: Int, takers: Queue[Deferred[F,A]], offers: Queue[(A, Deferred[F,Unit])])
+  case class State[F[_], A](queue: Queue[A], capacity: Int, takers: Queue[Deferred[F,A]], offers: Queue[(A, Deferred[F,Unit])])
 
 
-  def consumer[F[_]: Async: Console](id: Int, stateR: Ref[F, State1[F, Int]]): F[Unit] = {
+  def consumer[F[_]: Async: Console](id: Int, stateR: Ref[F, State[F, Int]]): F[Unit] = {
     val take: F[Int] =
       Deferred[F, Int].flatMap { taker =>
         stateR
           .modify {
-            case State1(queue,c, takers, offers) =>
+            case State(queue,c, takers, offers) =>
               queue.dequeueOption.fold {
-                (State1( queue,  c ,  takers.enqueue(taker),  offers), taker.get)
+                offers.dequeueOption.fold {
+                  (State( queue,  c ,  takers.enqueue(taker),  offers), taker.get)
+                } {
+                  case ((i, offer), offers) => offer.complete(()) flatMap ( _ => (State(queue, c, takers, offers), Async[F].pure(i) ) )
+                }
               } {
-                case (i, queue) => (State1(queue,  c,  takers,  offers), Async[F].pure(i))
+                case (i, queue) => (State(queue,  c,  takers,  offers), Async[F].pure(i))
               }
           }
           .flatten
@@ -51,15 +54,15 @@ object ProducerConsumerTry  extends IOApp {
 
   }
 
-  def producer[F[_]: Sync: Async: Console](id: Int, counterR: Ref[F, Int], stateR: Ref[F, State1[F, Int]]): F[Unit] = {
+  def producer[F[_]: Sync: Async: Console](id: Int, counterR: Ref[F, Int], stateR: Ref[F, State[F, Int]]): F[Unit] = {
 
     def offer(i: Int): F[Unit] =
       stateR.modify {
-        case State1(queue,c, takers, offers) =>
+        case State(queue,c, takers, offers) =>
           takers.dequeueOption.fold {
-            (State1(queue.enqueue(i), c, takers, offers), Sync[F].unit)
+            (State(queue.enqueue(i), c, takers, offers), Sync[F].unit)
           } {
-            case (taker, ntakers) => (State1(queue, c, ntakers, offers), taker.complete(i).void)
+            case (taker, ntakers) => (State(queue, c, ntakers, offers), taker.complete(i).void)
           }
       }.flatten
 
@@ -77,7 +80,7 @@ object ProducerConsumerTry  extends IOApp {
 
   override def run(args: List[String]): IO[ExitCode] =
     for {
-      stateR <- Ref.of[IO, State1[IO,Int]](State1(Queue.empty[Int], 1000, Queue.empty[Deferred[IO, Int]], Queue.empty[(Int, Deferred[IO, Unit])]  )  )
+      stateR <- Ref.of[IO, State[IO,Int]](State(Queue.empty[Int], 1000, Queue.empty[Deferred[IO, Int]], Queue.empty[(Int, Deferred[IO, Unit])]  )  )
       counterR <- Ref.of[IO, Int](1)
       producers = List.range(1, 11).map(producer(_, counterR, stateR)) // 10 producers
       consumers = List.range(1, 11).map(consumer(_, stateR))           // 10 consumers
