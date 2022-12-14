@@ -1,9 +1,9 @@
 package shop.programs
 
 import cats.effect.kernel.MonadCancel
-import cats.{ FlatMap, Monad }
-import cats.effect.{ ExitCode, GenTemporal, IO, IOApp, Ref, Sync, Temporal }
-import cats.effect.std.{ Console, Supervisor }
+import cats.{FlatMap, Monad}
+import cats.effect.{ExitCode, GenConcurrent, GenTemporal, IO, IOApp, Ref, Sync, Temporal}
+import cats.effect.std.{Console, Supervisor}
 import cats.syntax.all._
 
 import collection.immutable.Queue
@@ -30,8 +30,9 @@ object ProducerConsumerTry extends IOApp {
 
   def consumer[F[_]: Async: Console](id: Int, stateR: Ref[F, State[F, Int]]): F[Unit] = {
     val take: F[Int] =
-      Deferred[F, Int].flatMap { taker =>
-        stateR.modify {
+      for {
+        taker <- Deferred[F, Int]
+        mod <-  stateR.modify {
           case State(queue, c, takers, offers) =>
             queue.dequeueOption.fold {
               offers.dequeueOption.fold {
@@ -47,15 +48,20 @@ object ProducerConsumerTry extends IOApp {
                   case ((j, offer), offers) => State(queue.enqueue(j), c, takers, offers) -> offer.complete(()).as(i)
                 }
             }
-        }.flatten
-      }
+        }
+        i <- mod
+      } yield i
 
-    val qs = stateR.get.map(state => state.queue.size)
+
+
+
+
+    val qs = stateR.get.map(state => s"\tGröße von Queue: ${state.queue.size} von Offers: ${state.offers.size} von Takers: ${state.takers.size}")
 
     for {
       i <- take
       _ <- if (i % 500 == 0)
-        qs.flatMap(s => Console[F].println(s"Consumer $id has reached $i items\n\tQueues Größe: $s"))
+        qs.flatMap(s => Console[F].println(s"Consumer $id has reached $i items\n$s"))
       else Async[F].unit
       _ <- consumer(id, stateR)
     } yield ()
@@ -64,29 +70,48 @@ object ProducerConsumerTry extends IOApp {
 
   def producer[F[_]: Sync: Async: Console](id: Int, counterR: Ref[F, Int], stateR: Ref[F, State[F, Int]]): F[Unit] = {
 
+
     def offer(i: Int): F[Unit] =
-      Deferred[F, Unit].flatMap { offer =>
-        stateR.modify {
-          case State(queue, c, takers, offers) =>
-            takers.dequeueOption.fold {
-              if (queue.size < c)  State(queue.enqueue(i), c, takers, offers) -> Sync[F].unit
-              else State(queue, c, takers, offers.enqueue( (i , offer))) -> Sync[F].unit
-            } {
-              case (taker, ntakers) => State(queue, c, ntakers, offers) -> taker.complete(i).void
-            }
+      for {
+        offer <- Deferred[F, Unit]
+        mod <- stateR.modify {
+                case State(queue, c, takers, offers) =>
+                  takers.dequeueOption.fold {
+                    if (queue.size < c) State(queue.enqueue(i), c, takers, offers) -> Sync[F].unit
+                    else State(queue, c, takers, offers.enqueue((i, offer))) -> Sync[F].unit
+                  } {
+                    case (taker, ntakers) => State(queue, c, ntakers, offers) -> taker.complete(i).void
+                  }
+              }
+       _ <- mod
+      } yield ()
+
+    def offer1(i: Int): F[Unit] =
+      Deferred[F, Unit].flatMap[Unit]{ offerer =>
+        Async[F].uncancelable { poll => // `poll` used to embed cancelable code, i.e. the call to `offerer.get`
+          stateR.modify {
+            case State(queue, capacity, takers, offerers) if takers.nonEmpty =>
+              val (taker, rest) = takers.dequeue
+              State(queue, capacity, rest, offerers) -> taker.complete(i).void
+            case State(queue, capacity, takers, offerers) if queue.size < capacity =>
+              State(queue.enqueue(i), capacity, takers, offerers) -> Async[F].unit
+            case State(queue, capacity, takers, offerers) =>
+              val cleanup = stateR.update { s => s.copy(offerers = s.offerers.filter(_._2 ne offerer)) }
+              State(queue, capacity, takers, offerers.enqueue(i -> offerer)) -> poll(offerer.get).onCancel(cleanup)
+          }.flatten
         }
-      }.flatten
+      }
 
 
 
-    val qs = stateR.get.map(state => state.queue.size)
+    val qs = stateR.get.map(state => s"\tGröße von Queue: ${state.queue.size} von Offers: ${state.offers.size} von Takers: ${state.takers.size}")
 
     for {
       i <- counterR.getAndUpdate(_ + 1)
       _ <- offer(i)
       // _ <- delay_(1)
       _ <- if (i % 1000 == 0)
-        qs.flatMap(s => Console[F].println(s"Producer $id has reached $i items\n\tQueues Größe: $s"))
+        qs.flatMap(s => Console[F].println(s"Producer $id has reached $i items\n $s"))
       else Sync[F].unit
       _ <- producer(id, counterR, stateR)
     } yield ()
