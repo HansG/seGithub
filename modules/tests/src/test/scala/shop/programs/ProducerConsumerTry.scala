@@ -1,9 +1,9 @@
 package shop.programs
 
 import cats.effect.kernel.MonadCancel
-import cats.{FlatMap, Monad}
-import cats.effect.{ExitCode, GenConcurrent, GenTemporal, IO, IOApp, Ref, Sync, Temporal}
-import cats.effect.std.{Console, Supervisor}
+import cats.{ FlatMap, Monad }
+import cats.effect.{ ExitCode, GenTemporal, IO, IOApp, Ref, Sync, Temporal }
+import cats.effect.std.{ Console, Supervisor }
 import cats.syntax.all._
 
 import collection.immutable.Queue
@@ -27,6 +27,23 @@ object ProducerConsumerTry extends IOApp {
       takers: Queue[Deferred[F, A]],
       offers: Queue[(A, Deferred[F, Unit])]
   )
+
+  object State {
+    def empty[F[_], A](capacity: Int) = State(Queue.empty[A], capacity, Queue.empty[Deferred[F, A]], Queue.empty[(A, Deferred[F, Unit])])
+  }
+
+
+  def getter[F[_] : FlatMap, A](stateR: Ref[F, State[F, A]], lense : State[F, A] => A) = stateR.get.map(lense)
+
+  def sizes[F[_] : FlatMap](stateR: Ref[F, State[F, Int]]) = {
+    lazy val qs = getter[F,Int](stateR, (state : State[F, Int]) => state.queue.size)
+    lazy val ts = getter[F,Int](stateR, (state : State[F, Int]) => state.takers.size)
+    lazy val os = getter[F,Int](stateR, (state : State[F, Int]) => state.offers.size)
+
+    (qs, ts, os).mapN( (s1 :Int, s2 :Int, s3 :Int) => s"Queues Größe: ${s1}, Taker Größe: ${s2}, Offers Größe: ${s3} "  )
+  }
+
+
 
   def consumer[F[_]: Async: Console](id: Int, stateR: Ref[F, State[F, Int]]): F[Unit] = {
     val take: F[Int] =
@@ -55,13 +72,13 @@ object ProducerConsumerTry extends IOApp {
 
 
 
-
-    val qs = stateR.get.map(state => s"\tGröße von Queue: ${state.queue.size} von Offers: ${state.offers.size} von Takers: ${state.takers.size}")
+    lazy val sizesF = sizes(stateR)
 
     for {
       i <- take
       _ <- if (i % 500 == 0)
-        qs.flatMap(s => Console[F].println(s"Consumer $id has reached $i items\n$s"))
+        sizesF.flatMap(ss =>
+          Console[F].println(s"Consumer $id has reached $i items\n\t$ss"))
       else Async[F].unit
       _ <- consumer(id, stateR)
     } yield ()
@@ -96,7 +113,7 @@ object ProducerConsumerTry extends IOApp {
             case State(queue, capacity, takers, offerers) if queue.size < capacity =>
               State(queue.enqueue(i), capacity, takers, offerers) -> Async[F].unit
             case State(queue, capacity, takers, offerers) =>
-              val cleanup = stateR.update { s => s.copy(offerers = s.offerers.filter(_._2 ne offerer)) }
+              val cleanup = stateR.update { s => s.copy(offers = s.offers.filter(_._2 ne offerer)) }
               State(queue, capacity, takers, offerers.enqueue(i -> offerer)) -> poll(offerer.get).onCancel(cleanup)
           }.flatten
         }
@@ -104,14 +121,14 @@ object ProducerConsumerTry extends IOApp {
 
 
 
-    val qs = stateR.get.map(state => s"\tGröße von Queue: ${state.queue.size} von Offers: ${state.offers.size} von Takers: ${state.takers.size}")
+    lazy val sizesF = sizes(stateR)
 
     for {
       i <- counterR.getAndUpdate(_ + 1)
       _ <- offer(i)
       // _ <- delay_(1)
       _ <- if (i % 1000 == 0)
-        qs.flatMap(s => Console[F].println(s"Producer $id has reached $i items\n $s"))
+        sizesF.flatMap(s => Console[F].println(s"Producer $id has reached $i items\n\tQueues Größe: $s"))
       else Sync[F].unit
       _ <- producer(id, counterR, stateR)
     } yield ()
@@ -119,9 +136,8 @@ object ProducerConsumerTry extends IOApp {
 
   override def run(args: List[String]): IO[ExitCode] =
     for {
-      stateR <- Ref.of[IO, State[IO, Int]](
-        State(Queue.empty[Int], 1000, Queue.empty[Deferred[IO, Int]], Queue.empty[(Int, Deferred[IO, Unit])])
-      )
+      stateR <- Ref.of[IO, State[IO, Int]](State.empty[IO, Int](capacity = 100))
+
       counterR <- Ref.of[IO, Int](1)
       producers = List.range(1, 11).map(producer(_, counterR, stateR)) // 10 producers
       consumers = List.range(1, 11).map(consumer(_, stateR))           // 10 consumers
@@ -131,6 +147,8 @@ object ProducerConsumerTry extends IOApp {
           Console[IO].errorln(s"Error caught: ${t.getMessage}").as(ExitCode.Error)
         }
     } yield res
+
+
 
   import java.util.concurrent.{ Executors, TimeUnit }
   val scheduler = Executors.newScheduledThreadPool(1)
