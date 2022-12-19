@@ -29,27 +29,25 @@ object ProducerConsumerTry extends IOApp {
   )
 
   object State {
-    def empty[F[_], A](capacity: Int) = State(Queue.empty[A], capacity, Queue.empty[Deferred[F, A]], Queue.empty[(A, Deferred[F, Unit])])
+    def empty[F[_], A](capacity: Int) =
+      State(Queue.empty[A], capacity, Queue.empty[Deferred[F, A]], Queue.empty[(A, Deferred[F, Unit])])
   }
 
+  def getter[F[_]: FlatMap, A](stateR: Ref[F, State[F, A]], lense: State[F, A] => A) = stateR.get.map(lense)
 
-  def getter[F[_] : FlatMap, A](stateR: Ref[F, State[F, A]], lense : State[F, A] => A) = stateR.get.map(lense)
+  def sizes[F[_]: FlatMap](stateR: Ref[F, State[F, Int]]) = {
+    lazy val qs = getter[F, Int](stateR, (state: State[F, Int]) => state.queue.size)
+    lazy val ts = getter[F, Int](stateR, (state: State[F, Int]) => state.takers.size)
+    lazy val os = getter[F, Int](stateR, (state: State[F, Int]) => state.offers.size)
 
-  def sizes[F[_] : FlatMap](stateR: Ref[F, State[F, Int]]) = {
-    lazy val qs = getter[F,Int](stateR, (state : State[F, Int]) => state.queue.size)
-    lazy val ts = getter[F,Int](stateR, (state : State[F, Int]) => state.takers.size)
-    lazy val os = getter[F,Int](stateR, (state : State[F, Int]) => state.offers.size)
-
-    (qs, ts, os).mapN( (s1 :Int, s2 :Int, s3 :Int) => s"Queues Größe: ${s1}, Taker Größe: ${s2}, Offers Größe: ${s3} "  )
+    (qs, ts, os).mapN((s1: Int, s2: Int, s3: Int) => s"Queues Größe: ${s1}, Taker Größe: ${s2}, Offers Größe: ${s3} ")
   }
-
-
 
   def consumer[F[_]: Async: Console](id: Int, stateR: Ref[F, State[F, Int]]): F[Unit] = {
     val take: F[Int] =
       for {
         taker <- Deferred[F, Int]
-        mod <-  stateR.modify {
+        mod <- stateR.modify {
           case State(queue, c, takers, offers) =>
             queue.dequeueOption.fold {
               offers.dequeueOption.fold {
@@ -69,42 +67,41 @@ object ProducerConsumerTry extends IOApp {
         i <- mod
       } yield i
 
-
-
-
     lazy val sizesF = sizes(stateR)
 
     for {
       i <- take
       _ <- if (i % 500 == 0)
-        sizesF.flatMap(ss =>
-          Console[F].println(s"Consumer $id has reached $i items\n\t$ss"))
+        sizesF.flatMap(ss => Console[F].println(s"Consumer $id has reached $i items\n\t$ss"))
       else Async[F].unit
       _ <- consumer(id, stateR)
     } yield ()
 
   }
 
-  def producer[F[_]: Sync: Async: Console](id: Int, counterR: Ref[F, Int], stateR: Ref[F, State[F, Int]]): F[Unit] = {
-
+  def producer[F[_]: Sync: Async:  Console](id: Int, counterR: Ref[F, Int], stateR: Ref[F, State[F, Int]]): F[Unit] = {
 
     def offer(i: Int): F[Unit] =
       for {
         offer <- Deferred[F, Unit]
-        mod <- stateR.modify {
-                case State(queue, c, takers, offers) =>
-                  takers.dequeueOption.fold {
-                    if (queue.size < c) State(queue.enqueue(i), c, takers, offers) -> Sync[F].unit
-                    else State(queue, c, takers, offers.enqueue((i, offer))) -> Sync[F].unit
-                  } {
-                    case (taker, ntakers) => State(queue, c, ntakers, offers) -> taker.complete(i).void
-                  }
-              }
-       _ <- mod
+        _ <- Async[F].uncancelable { poll =>
+          for {
+            mod <- stateR.modify {
+              case State(queue, c, takers, offers) =>
+                takers.dequeueOption.fold {
+                  if (queue.size < c) State(queue.enqueue(i), c, takers, offers) -> Sync[F].unit
+                  else State(queue, c, takers, offers.enqueue((i, offer)))       -> poll(offer.get).onCancel(cleanup)
+                } {
+                  case (taker, ntakers) => State(queue, c, ntakers, offers) -> taker.complete(i).void
+                }
+            }
+            _ <- mod
+          } yield ()
+        }
       } yield ()
 
     def offer1(i: Int): F[Unit] =
-      Deferred[F, Unit].flatMap[Unit]{ offerer =>
+      Deferred[F, Unit].flatMap[Unit] { offerer =>
         Async[F].uncancelable { poll => // `poll` used to embed cancelable code, i.e. the call to `offerer.get`
           stateR.modify {
             case State(queue, capacity, takers, offerers) if takers.nonEmpty =>
@@ -113,13 +110,13 @@ object ProducerConsumerTry extends IOApp {
             case State(queue, capacity, takers, offerers) if queue.size < capacity =>
               State(queue.enqueue(i), capacity, takers, offerers) -> Async[F].unit
             case State(queue, capacity, takers, offerers) =>
-              val cleanup = stateR.update { s => s.copy(offers = s.offers.filter(_._2 ne offerer)) }
+              val cleanup = stateR.update { s =>
+                s.copy(offers = s.offers.filter(_._2 ne offerer))
+              }
               State(queue, capacity, takers, offerers.enqueue(i -> offerer)) -> poll(offerer.get).onCancel(cleanup)
           }.flatten
         }
       }
-
-
 
     lazy val sizesF = sizes(stateR)
 
@@ -147,8 +144,6 @@ object ProducerConsumerTry extends IOApp {
           Console[IO].errorln(s"Error caught: ${t.getMessage}").as(ExitCode.Error)
         }
     } yield res
-
-
 
   import java.util.concurrent.{ Executors, TimeUnit }
   val scheduler = Executors.newScheduledThreadPool(1)
