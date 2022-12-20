@@ -9,7 +9,7 @@ object MCQueueTest extends IOApp {
 
 
 
-  def producer(id: Int, counterR: Ref[IO, Int], cqueue: MCQueue[IO, Int]): IO[Unit] = {
+  def producer[F[_]: Async](id: Int, counterR: Ref[F, Int], cqueue:  MCQueue[F , Int] ): F[Unit] = {
     lazy val sizesF =  cqueue.sizes
 
     for {

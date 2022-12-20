@@ -1,18 +1,11 @@
 package shop.programs
 
-import cats.FlatMap
-import cats.effect.std.Console
-import cats.effect.{ Async, Deferred, ExitCode, IO, IOApp, Ref, Sync }
+import cats.effect.{ Async, Deferred,   Ref, Sync }
 
 import scala.collection.immutable.Queue
 
 import cats.syntax.all._
 import cats.effect.syntax.all._
-
-
-
-import cats.effect.{Async, Deferred, Ref}
-
 
 
 
@@ -28,7 +21,8 @@ private object State {
     State[F, A](Queue.empty[A], capacity, Queue.empty[Deferred[F, A]], Queue.empty[(A, Deferred[F, Unit])])
 }
 
-class MCQueue[F[_]: Async: FlatMap, A](stateR: Ref[F, State[F, A]]) {
+
+class MCQueue[F[_]: Async , A](stateR: Ref[F, State[F, A]]) {
 
   val take: F[A] =
     for {
@@ -69,7 +63,7 @@ class MCQueue[F[_]: Async: FlatMap, A](stateR: Ref[F, State[F, A]]) {
               takers.dequeueOption.fold {
                 if (queue.size < c) State(queue.enqueue(a), c, takers, offerers) -> Sync[F].unit
                 else {
-                  val cleanup = stateR.update(st => st.copy(offerers = st.offerers.filter(_ ne offer)))
+                  val cleanup = stateR.update(st => st.copy(offerers = st.offerers.filter(_ ne (a, offer))))
                   State(queue, c, takers, offerers.enqueue((a, offer))) -> poll(offer.get).onCancel(cleanup)
                 }
               } {
