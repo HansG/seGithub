@@ -3,25 +3,31 @@ package shop.programs
 
 
 import cats.effect.std.Console
-import cats.effect.{ Async,  ExitCode, IO, IOApp, Ref, Sync }
+import cats.effect.{Async, ExitCode, IO, IOApp, Ref}
+import cats.syntax.all._
+import scala.concurrent.duration._
+
 
 object MCQueueTest extends IOApp {
 
 
+  private val console = IO.consoleForIO
 
-  def producer[F[_]: Async](id: Int, counterR: Ref[F, Int], cqueue:  MCQueue[F , Int] ): F[Unit] = {
+  def producer(id: Int, counterR: Ref[IO, Int], cqueue:  MCQueue[IO , Int] ): IO[Unit] = {
     lazy val sizesF =  cqueue.sizes
 
     for {
       i <- counterR.getAndUpdate(_ + 1)
       _ <- cqueue.offer(i)
-      // _ <- delay_(1)
+     _ <-   IO.sleep(50.millis)
       _ <- if (i % 1000 == 0) {
-        sizesF.flatMap(s => Console[IO].println(s"Producer $id has reached $i items\n\tQueues Größe: $s"))
-      } else Sync[IO].unit
+        sizesF.flatMap(s => console.println(s"Producer $id has reached $i items\n\t $s"))
+      } else IO.unit
       _ <- producer(id, counterR, cqueue)
     } yield ()
   }
+
+
 
   def consumer(id: Int, cqueue: MCQueue[IO, Int]): IO[Unit] = {
     lazy val sizesF =   cqueue.sizes 
@@ -29,8 +35,8 @@ object MCQueueTest extends IOApp {
     for {
       i <- cqueue.take
       _ <- if (i % 500 == 0)
-        sizesF.flatMap(ss => Console[IO].println(s"Consumer $id has reached $i items\n\t$ss"))
-      else Async[IO].unit
+        sizesF.flatMap(ss => console.println(s"Consumer $id has reached $i items\n\t$ss"))
+      else IO.unit
       _ <- consumer(id, cqueue)
     } yield ()
 
@@ -38,7 +44,7 @@ object MCQueueTest extends IOApp {
 
   def run(args: List[String]): IO[ExitCode] =
     for {
-      cqueue <- MCQueue[IO, Int].apply(10)
+      cqueue <- MCQueue[IO, Int](10)
       counterR <- Ref.of[IO, Int](1)
       producers = List.range(1, 11).map(producer(_, counterR, cqueue)) // 10 producers
       consumers = List.range(1, 11).map(consumer(_, cqueue))           // 10 consumers
@@ -48,5 +54,30 @@ object MCQueueTest extends IOApp {
           Console[IO].errorln(s"Error caught: ${t.getMessage}").as(ExitCode.Error)
         }
     } yield res
+
+
+  import java.util.concurrent.{Executors, TimeUnit}
+  val scheduler = Executors.newScheduledThreadPool(1)
+  def delay_(millis: Long) =
+    Async[IO].async_[Unit] { cb =>
+      scheduler.schedule(new Runnable {
+        def run = cb(Right(()))
+      }, millis, TimeUnit.MILLISECONDS)
+      ()
+    }
+  // _ <- delay_(10)
+  //     _ <- Sync[F].blocking(Thread.sleep(500))
+
+/*
+  _ <- Supervisor[IO].use { supervisor =>
+    supervisor.supervise(
+       IO[..]
+    )
+*/
+
+
+
+
+
 
 }
