@@ -18,8 +18,8 @@ object MCQueueTest extends IOApp {
 
     for {
       i <- counterR.getAndUpdate(_ + 1)
+      _ <-   IO.sleep(50.millis)
       _ <- cqueue.offer(i)
-     _ <-   IO.sleep(50.millis)
       _ <- if (i % 1000 == 0) {
         sizesF.flatMap(s => console.println(s"Producer $id has reached $i items\n\t $s"))
       } else IO.unit
@@ -34,6 +34,7 @@ object MCQueueTest extends IOApp {
 
     for {
       i <- cqueue.take
+      _ <-   IO.sleep(50.millis)
       _ <- if (i % 500 == 0)
         sizesF.flatMap(ss => console.println(s"Consumer $id has reached $i items\n\t$ss"))
       else IO.unit
