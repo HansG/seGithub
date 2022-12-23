@@ -21,7 +21,7 @@ import java.util.UUID
 /*
 Für IOTests:
 Besser IOApp als Worksheet: nur ausgewähltes läuft, kein Rebuild Projekt nötig, damit imports in Worksheet funktionieren
-Besser CatsEffectSuite als IOApp: nur ausgewählten test laufen lassen (auch generell ohne IO)
+Besser CatsEffectSuite als IOApp: nur ausgewählten "test" laufen lassen (auch generell ohne IO)
  */
 //object StreamTry extends IOApp {
 class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
@@ -52,7 +52,7 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
   test("first PropF test") {
     PropF.forAllF { (x: PaymentId) =>
-      IO(x).start.flatMap(_.join).map(res => {println(s"$x - $res"); assert(true)} )
+      IO(x).start.flatMap(_.join).map(res => {println(s"$x - $res"); () } )
     }
   }
 
