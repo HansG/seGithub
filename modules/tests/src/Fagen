@@ -1,0 +1,17 @@
+
+Wo werden zur Laufzeit Instanzen von ...erzeugt ..und wieviele????
+         AppResources
+            .make[IO](cfg)
+            .evalMap { res =>
+              Security.make[IO](cfg, res.postgres, res.redis).map { security =>
+                val clients  = HttpClients.make[IO](cfg.paymentConfig, res.client)
+                val services = Services.make[IO](res.redis, res.postgres, cfg.cartExpiration)
+                val programs = Programs.make[IO](cfg.checkoutConfig, services, clients)
+                val api      = HttpApi.make[IO](services, programs, security)
+                cfg.httpServerConfig -> api.httpApp
+              }
+            }
+            .flatMap {
+              case (cfg, httpApp) =>
+                MkHttpServer[IO].newEmber(cfg, httpApp)
+            }
