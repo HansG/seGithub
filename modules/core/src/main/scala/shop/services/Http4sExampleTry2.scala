@@ -52,7 +52,7 @@ object Http4sExample2 extends Http4sExample with IOApp  {
       new CountryService[F] {
         def byCode(code: String): F[Option[Country]] =
           resSession.use { sess =>
-            sess.prepare(countryQuery(sql"WHERE code = ${bpchar(3)}")).use { psByCode =>
+            sess.prepare(countryQuery(sql"WHERE code = ${bpchar(3)}")).flatMap  { psByCode =>
               psByCode.option(code)
             }
           }.onError {
@@ -65,7 +65,7 @@ object Http4sExample2 extends Http4sExample with IOApp  {
 
         def all:  F[Stream[F, Country]] =
           resSession.use { sess =>
-           sess.prepare(countryQuery(Fragment.empty)).use { prepQ =>
+           sess.prepare(countryQuery(Fragment.empty)).flatMap { prepQ =>
               Monad[F].pure( prepQ.stream(Void, 64)
               )
             }
@@ -79,7 +79,7 @@ object Http4sExample2 extends Http4sExample with IOApp  {
 
   
   /** Resource yielding a pool of `CountryService`, backed by a single `Blocker` and `SocketGroup`. */
-  def resResSession[F[_]: Concurrent: Network: Console: Trace]: Resource[F, Resource[F, Session[F]]] =
+  def resResSession[F[_]: Concurrent: Network: Console: Trace: Temporal]: Resource[F, Resource[F, Session[F]]] =
     Session
       .pooled[F](
         host = "localhost",

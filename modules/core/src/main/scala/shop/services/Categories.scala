@@ -27,7 +27,7 @@ object Categories {
 
       def create(name: CategoryName): F[CategoryId] =
         postgres.use { session =>
-          session.prepare(insertCategory).use { cmd =>
+          session.prepare(insertCategory).flatMap { cmd =>
             ID.make[F, CategoryId].flatMap { id =>
               cmd.execute(Category(id, name)).as(id)
             }

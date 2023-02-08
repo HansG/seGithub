@@ -1,12 +1,12 @@
 package shop.resources
 
+import cats.effect.kernel.Temporal
 import shop.config.types._
-
 import cats.effect.std.Console
-import cats.effect.{ Concurrent, Resource }
+import cats.effect.{Concurrent, Resource}
 import cats.syntax.all._
 import dev.profunktor.redis4cats.effect.MkRedis
-import dev.profunktor.redis4cats.{ Redis, RedisCommands }
+import dev.profunktor.redis4cats.{Redis, RedisCommands}
 import eu.timepit.refined.auto._
 import fs2.io.net.Network
 import natchez.Trace.Implicits.noop
@@ -24,7 +24,7 @@ sealed abstract class AppResources[F[_]](
 
 object AppResources {
 
-  def make[F[_]: Concurrent: Console: Logger: MkHttpClient: MkRedis: Network](
+  def make[F[_]: Concurrent: Console: Logger: MkHttpClient: MkRedis: Network: Temporal](
       cfg: AppConfig
   ): Resource[F, AppResources[F]] = {
 

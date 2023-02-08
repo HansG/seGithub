@@ -36,14 +36,14 @@ object Orders {
 
       def get(userId: UserId, orderId: OrderId): F[Option[Order]] =
         postgres.use { session =>
-          session.prepare(selectByUserIdAndOrderId).use { q =>
+          session.prepare(selectByUserIdAndOrderId).flatMap { q =>
             q.option(userId ~ orderId)
           }
         }
 
       def findBy(userId: UserId): F[List[Order]] =
         postgres.use { session =>
-          session.prepare(selectByUserId).use { q =>
+          session.prepare(selectByUserId).flatMap { q =>
             q.stream(userId, 1024).compile.toList
           }
         }
@@ -55,7 +55,7 @@ object Orders {
           total: Money
       ): F[OrderId] =
         postgres.use { session =>
-          session.prepare(insertOrder).use { cmd =>
+          session.prepare(insertOrder).flatMap { cmd =>
             ID.make[F, OrderId].flatMap { id =>
               val itMap = items.toList.map(x => x.item.uuid -> x.quantity).toMap
               val order = Order(id, paymentId, itMap, total)

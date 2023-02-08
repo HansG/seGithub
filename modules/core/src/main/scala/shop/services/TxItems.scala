@@ -34,7 +34,7 @@ object TxItems {
     new TxItems[F] {
       def create(item: ItemCreation): F[ItemId] =
         postgres.use { s =>
-          (s.prepare(insertBrand), s.prepare(insertCategory), s.prepare(insertItem)).tupled.use {
+          (s.prepare(insertBrand), s.prepare(insertCategory), s.prepare(insertItem)).tupled.flatMap {
             case (ib, ic, it) =>
               s.transaction.surround {
                 for {
