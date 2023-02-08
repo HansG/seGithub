@@ -26,7 +26,7 @@ object Http4sExampleTry1 extends Http4sExample with IOApp {
   /** A service interface and companion factory method. */
   trait CountryService[F[_]] {
     def byCode(code: String): F[Option[Country]]
-    def all: Resource[F, Stream[F, Country]]
+    def all: F[Stream[F, Country]]
   }
 
   /** Given a `Session` we can create a `Countries` resource with pre-prepared statements. */
@@ -40,11 +40,11 @@ object Http4sExampleTry1 extends Http4sExample with IOApp {
     resSession.map { sess =>
       new CountryService[F] {
         def byCode(code: String): F[Option[Country]] =
-            sess.prepare(countryQuery(sql"WHERE code = ${bpchar(3)}")).use { psByCode =>
+            sess.prepare(countryQuery(sql"WHERE code = ${bpchar(3)}")).flatMap { psByCode =>
               psByCode.option(code)
             }
 
-        def all: Resource[F, Stream[F, Country]] =
+        def all: F[Stream[F, Country]] =
           sess.prepare(countryQuery(Fragment.empty)).map { psAll =>
             psAll.stream(Void, 64)
           }
@@ -54,7 +54,7 @@ object Http4sExampleTry1 extends Http4sExample with IOApp {
 
 
   /** Resource yielding a pool of `CountryService`, backed by a single `Blocker` and `SocketGroup`. */
-  def resResCountryService[F[_]: Concurrent: Network: Console: Trace]: Resource[F, Resource[F, CountryService[F]]] =
+  def resResCountryService[F[_]: Concurrent: Network: Console: Trace: Temporal]: Resource[F, Resource[F, CountryService[F]]] =
     Session
       .pooled[F](
         host = "localhost",
@@ -83,7 +83,7 @@ object Http4sExampleTry1 extends Http4sExample with IOApp {
           }
 
         case GET -> Root / "countries" =>
-          countries.all.use { st =>
+          countries.all.flatMap { st =>
             val stt = st.compile.toList.map(_.asJson) //how to use stream directly in the response?
             Ok(stt)
           }

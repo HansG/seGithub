@@ -33,21 +33,21 @@ object Items {
 
       def findBy(brand: BrandName): F[List[Item]] =
         postgres.use { session =>
-          session.prepare(selectByBrand).use { ps =>
+          session.prepare(selectByBrand).flatMap { ps =>
             ps.stream(brand, 1024).compile.toList
           }
         }
 
       def findById(itemId: ItemId): F[Option[Item]] =
         postgres.use { session =>
-          session.prepare(selectById).use { ps =>
+          session.prepare(selectById).flatMap { ps =>
             ps.option(itemId)
           }
         }
 
       def create(item: CreateItem): F[ItemId] =
         postgres.use { session =>
-          session.prepare(insertItem).use { cmd =>
+          session.prepare(insertItem).flatMap { cmd =>
             ID.make[F, ItemId].flatMap { id =>
               cmd.execute(id ~ item).as(id)
             }
@@ -56,7 +56,7 @@ object Items {
 
       def update(item: UpdateItem): F[Unit] =
         postgres.use { session =>
-          session.prepare(updateItem).use { cmd =>
+          session.prepare(updateItem).flatMap { cmd =>
             cmd.execute(item).void
           }
         }

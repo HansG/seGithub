@@ -27,7 +27,7 @@ object Brands {
 
       def create(name: BrandName): F[BrandId] =
         postgres.use { session =>
-          session.prepare(insertBrand).use { cmd =>
+          session.prepare(insertBrand).flatMap { cmd =>
             ID.make[F, BrandId].flatMap { id =>
               cmd.execute(Brand(id, name)).as(id)
             }

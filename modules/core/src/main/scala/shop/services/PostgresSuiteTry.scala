@@ -66,7 +66,7 @@ object PostgresSuiteTry {
 
         def create(name: BrandNameT): F[BrandIdT] =
           postgres.use { session =>
-            session.prepare(insertBrand).use { cmd =>
+            session.prepare(insertBrand).flatMap { cmd =>
               ID.make[F, BrandIdT].flatMap { id =>
                 cmd.execute(BrandT(id, name)).as(id)
               }
@@ -137,12 +137,12 @@ object PostgresSuiteTry {
     val insertSql = sql"insert into users $codec".command
 
     def insert(dbres: Res, username: String, password: String) =
-      dbres.use(s => s.prepare(insertSql).use(pc => pc.execute(UserT(UUID.randomUUID(), username, password))))
+      dbres.use(s => s.prepare(insertSql).flatMap(pc => pc.execute(UserT(UUID.randomUUID(), username, password))))
 
     val findSql = sql"select * from users where username = $varchar".query(codec)
 
     def find(dbres: Res, uname: String) = dbres.use { s =>
-      s.prepare(findSql).use { q =>
+      s.prepare(findSql).flatMap { q =>
         q.option(uname).map {
           case Some(u) => u.some
           case _       => none[UserT]

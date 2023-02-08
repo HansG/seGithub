@@ -25,7 +25,7 @@ object Users {
 
       def find(username: UserName): F[Option[UserWithPassword]] =
         postgres.use { session =>
-          session.prepare(selectUser).use { q =>
+          session.prepare(selectUser).flatMap { q =>
             q.option(username).map {
               case Some(u ~ p) => UserWithPassword(u.id, u.name, p).some
               case _           => none[UserWithPassword]
@@ -35,7 +35,7 @@ object Users {
 
       def create(username: UserName, password: EncryptedPassword): F[UserId] =
         postgres.use { session =>
-          session.prepare(insertUser).use { cmd =>
+          session.prepare(insertUser).flatMap { cmd =>
             ID.make[F, UserId].flatMap { id =>
               cmd
                 .execute(User(id, username) ~ password)
