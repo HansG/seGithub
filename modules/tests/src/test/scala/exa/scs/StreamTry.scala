@@ -18,7 +18,7 @@ import shop.domain.order.PaymentId
 import java.util.UUID
 
 
-/*
+/*TestDoku
 Für IOTests:
 Besser IOApp als Worksheet: nur ausgewähltes läuft, kein Rebuild Projekt nötig, damit imports in Worksheet funktionieren
 Besser CatsEffectSuite als IOApp: nur ausgewählten "test" laufen lassen (auch generell ohne IO)
