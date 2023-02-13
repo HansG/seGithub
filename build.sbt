@@ -130,6 +130,12 @@ lazy val core = (project in file("modules/core"))
     Libraries.weaverScalaCheck
   ),
     libraryDependencies ++= javaFXModules.map(m => "org.openjfx" % s"javafx-$m" % "11" classifier "win")
+      ++
+      dep("org.typelevel", "cats-effect", "3.3.12")("")("-laws", "-testkit") ++
+      dep("org.scalameta", "munit", "0.7.29")()("", "-scalacheck") ++
+      dep("org.typelevel", "", "1.0.7")()("munit-cats-effect-3") ++
+      dep("org.typelevel",  "scalacheck-effect", "1.0.3")()("", "-munit")
+
   )
 
 addCommandAlias("runLinter", ";scalafixAll --rules OrganizeImports")

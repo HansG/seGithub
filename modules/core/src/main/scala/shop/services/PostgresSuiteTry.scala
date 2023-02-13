@@ -1,16 +1,17 @@
 package shop.services
 
 import org.scalacheck.Gen
-import shop.domain.brand.{ Brand, BrandId, BrandName }
+import shop.domain.brand.{Brand, BrandId, BrandName}
 import cats.effect._
-import cats.implicits.{ catsSyntaxOptionId, none, toFlatMapOps, toFunctorOps }
+import cats.implicits.{catsSyntaxOptionId, none, toFlatMapOps, toFunctorOps}
 import monocle.Iso
+import munit.CatsEffectSuite
 import skunk._
 import skunk.implicits._
 import skunk.codec.all._
 import natchez.Trace.Implicits.noop
 import shop.domain.ID
-import shop.domain.auth.{ EncryptedPassword, UserName }
+import shop.domain.auth.{EncryptedPassword, UserName}
 import shop.effects.GenUUID
 import shop.optics.IsUUID
 import shop.services.PostgresSuiteTry.Res
@@ -141,6 +142,11 @@ object PostgresSuiteTry {
 
     val findSql = sql"select * from users where username = $varchar".query(codec)
 
+    def findUser[A]( where : Fragment[A]) = sql"select * from users $where".query(codec)
+    val frag : Fragment[String] =  sql"username = $varchar"
+    def findUserByName( uname: String) = findUser(frag)
+    val findAllUser  = findUser(Fragment.empty)
+
     def find(dbres: Res, uname: String) = dbres.use { s =>
       s.prepare(findSql).flatMap { q =>
         q.option(uname).map {
@@ -155,6 +161,37 @@ object PostgresSuiteTry {
         d <- insert(dbres, username, password)
         x <- find(dbres, username)
       } yield x.count(_.id == d)
+
+  }
+
+
+  object TestTry extends CatsEffectSuite {
+    import UserTry._
+
+    test("findUser") {
+      StartPostgres.singleSession.use { s =>
+        s.prepare(findAllUser).flatMap { q =>
+          q.stream(Void,32).evalTap(u => IO(println(u))).compile.toList
+        }
+      }
+    }
+
+    /*
+    https://stackoverflow.com/questions/60438969/postgresql-npgsql-returning-42601-syntax-error-at-or-near-1
+    using (Npgsql.NpgsqlConnection conn = new Npgsql.NpgsqlConnection(DBManager.GetConnectionString()))
+            {
+                conn.Open();
+                Logger.Info("connection opened for adding column");
+                using (Npgsql.NpgsqlCommand addColumnQuery = new Npgsql.NpgsqlCommand(@"ALTER TABLE @tableName ADD COLUMN IF NOT EXISTS @columnName  @columnType;", conn))
+                {
+                    addColumnQuery.Parameters.AddWithValue("@tableName", tableName);
+                    addColumnQuery.Parameters.AddWithValue("@columnName", columnName);
+                    addColumnQuery.Parameters.AddWithValue("@columnType", columnType);
+                    addColumnQuery.ExecuteNonQuery();
+                }
+            }
+     */
+
 
   }
 
