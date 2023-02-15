@@ -1,6 +1,7 @@
 package shop.services
 
 import org.scalacheck.Gen
+import org.scalacheck.Prop._
 import shop.domain.brand.{Brand, BrandId, BrandName}
 import cats.Monad
 import cats.effect._
@@ -19,7 +20,7 @@ import shop.services.PostgresSuiteTry.Res
 
 import java.util.UUID
 
-object PostgresSuiteTry {
+object PostgresSuiteTry extends CatsEffectSuite {
   import StartPostgres._
 
   type Res = Resource[IO, Session[IO]]
@@ -112,9 +113,7 @@ object PostgresSuiteTry {
 
   val flushTables: Command[Void] = sql"DELETE FROM #brands".command
 
-  val brandTSession        = BrandsT.make[IO](singleSession)
-  val brand: BrandT        = brandTGen.sample.get
-  val brandL: List[BrandT] = brandTLGen.sample.get
+
   def trys(brand: BrandT): IO[Unit] =
     for {
       x <- brandTSession.findAll
@@ -126,18 +125,29 @@ object PostgresSuiteTry {
         .fold(_.printStackTrace(), "Neu: " + _.toString))
     )
 
-  // res.unsafeRunSync()
+  val brandTSession = BrandsT.make[IO](singleSession)
+  val brand: BrandT = brandTGen.sample.get
+  val brandL: List[BrandT] = brandTLGen.sample.get
+
+  test("single brand") {
+    trys(brand)
+  }
+
+  test("list brand") {
+    brandL.traverse(trys)
+  }
+
+  test("list brand") {
+    forAll(brandTGen) { brand =>
+      trys(brand).as(passed)
+    }
+  }
+
+  //res.unsafeRunSync()
 
 
 
   //gen zu stream + parMap mit pooledSessions
-
-  val test0 = singleSession.use { s => // (3)
-    for {
-      d <- s.unique(sql"select current_date".query(date)) // (4)
-      _ <- IO.println(s"The current date is $d.")
-    } yield ExitCode.Success
-  }
 
 }
 
@@ -175,7 +185,7 @@ object StartPostgres extends App {
       password = Some("postgres"),
       database = "store",
       max = 10
-    )
+    ).evalTap(checkPostgresConnection(_))
 
   lazy val singleSession: Res =
     Session.single[IO](
@@ -185,6 +195,22 @@ object StartPostgres extends App {
       password = Some("postgres"),
       database = "store"
     )
+
+
+  def checkPostgresConnection( postgres: Resource[F, Session[F]] ): F[Unit] =
+    postgres.use { session =>
+      session.unique(sql"select version();".query(text)).flatMap { v =>
+        Logger[F].info(s"Connected to Postgres $v")
+      }
+    }
+
+  val test0 = singleSession.use { s => // (3)
+    for {
+      d <- s.unique(sql"select current_date".query(date)) // (4)
+      _ <- IO.println(s"The current date is $d.")
+    } yield ExitCode.Success
+  }
+
 
 }
 
@@ -229,7 +255,7 @@ object UserTry {
 }
 
 
-object TestTry extends CatsEffectSuite {
+object TestUserTry extends CatsEffectSuite {
   import UserTry._
 
   test("findUser") {

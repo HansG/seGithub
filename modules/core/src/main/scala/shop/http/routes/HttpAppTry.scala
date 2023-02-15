@@ -2,9 +2,9 @@ package shop.http.routes
 
 import cats.effect._
 import cats.syntax.all._
-import com.comcast.ip4s.{ Host, IpLiteralSyntax, Port }
-import derevo.cats.{ eqv, show }
-import derevo.circe.magnolia.{ decoder, encoder }
+import com.comcast.ip4s.{Host, IpLiteralSyntax, Port}
+import derevo.cats.{eqv, show}
+import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.types.string.NonEmptyString
 import io.circe.syntax.EncoderOps
@@ -13,29 +13,30 @@ import monocle.Iso
 import org.http4s.Method._
 import org.http4s._
 import org.http4s.circe.CirceEntityCodec.circeEntityEncoder
-import org.http4s.circe.{ JsonDecoder, toMessageSyntax }
+import org.http4s.circe.{JsonDecoder, toMessageSyntax}
 import org.http4s.client.Client
 import org.http4s.client.dsl.Http4sClientDsl
 import org.http4s.dsl.Http4sDsl
 import org.http4s.implicits.http4sKleisliResponseSyntaxOptionT
-import org.http4s.server.middleware.{ RequestLogger, ResponseLogger }
+import org.http4s.server.middleware.{RequestLogger, ResponseLogger}
 import org.scalacheck.Gen
 import org.scalacheck.rng.Seed
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 import java.util.UUID
-import scala.concurrent.duration.{ DurationInt, FiniteDuration }
-import cats.{ Monad, MonadThrow }
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
+import cats.{Monad, MonadThrow}
 import cats.data.Kleisli
 import cats.effect.kernel.Resource
 import org.http4s.ember.client.EmberClientBuilder
 import org.http4s.ember.server.EmberServerBuilder
-import org.http4s.server.{ Router, Server }
+import org.http4s.server.{Router, Server}
 import upickle.default
 import eu.timepit.refined.auto._
 import io.circe.Decoder
 import io.circe.generic.codec.DerivedAsObjectCodec.deriveCodec
+import org.http4s.util.StringWriter
 import shop.domain.order.PaymentError
 
 object HttAppTry extends IOApp.Simple {
@@ -202,15 +203,23 @@ object HttAppClientTry extends IOApp.Simple {
 
   case class EmberClientAtServer(client: Client[IO], uriConfig: UriConfigI) extends ClientApi with Http4sClientDsl[IO] {
 
+    def statusToString(ex: Status) = {
+      val writer = new StringWriter
+      ex.render(writer)
+      writer.result
+    }
+
     def getProds: IO[List[Prod]] =
-      uriConfig.uri.flatMap { uri =>
+      uriConfig.uri.flatMap {
+
+        uri =>
         client.run(GET(uri)).use { resp =>
           resp.status match {
             case Status.Ok | Status.Conflict =>
               resp.asJsonDecode[List[Prod]]
             case ex =>
               PaymentError(
-                Option(ex.reason).getOrElse("unknown")
+                Option(statusToString(ex)).getOrElse("unknown")
               ).raiseError[IO, List[Prod]]
           }
         }
@@ -224,7 +233,7 @@ object HttAppClientTry extends IOApp.Simple {
               resp.asJsonDecode[Prod]
             case st =>
               PaymentError(
-                Option(st.reason).getOrElse("unknown")
+                Option(statusToString(st)).getOrElse("unknown")
               ).raiseError[IO, Prod]
           }
         }
