@@ -2,8 +2,9 @@ package shop.services
 
 import org.scalacheck.Gen
 import shop.domain.brand.{Brand, BrandId, BrandName}
+import cats.Monad
 import cats.effect._
-import cats.implicits.{catsSyntaxOptionId, none, toFlatMapOps, toFunctorOps}
+import cats.implicits.{catsSyntaxOptionId, none, toFlatMapOps, toFunctorOps, toTraverseOps}
 import monocle.Iso
 import munit.CatsEffectSuite
 import skunk._
@@ -127,76 +128,6 @@ object PostgresSuiteTry {
 
   // res.unsafeRunSync()
 
-  object UserTry {
-    case class UserT(id: UUID, name: String, pwd: String)
-
-    val codec = (uuid ~ varchar ~ varchar).imap {
-      case id ~ name ~ pwd => UserT(id, name, pwd)
-    } {
-      case u => u.id ~ u.name ~ u.pwd
-    }
-    val insertSql = sql"insert into users $codec".command
-
-    def insert(dbres: Res, username: String, password: String) =
-      dbres.use(s => s.prepare(insertSql).flatMap(pc => pc.execute(UserT(UUID.randomUUID(), username, password))))
-
-    val findSql = sql"select * from users where username = $varchar".query(codec)
-
-    def findUser[A]( where : Fragment[A]) = sql"select * from users $where".query(codec)
-    val frag : Fragment[String] =  sql"username = $varchar"
-    def findUserByName( uname: String) = findUser(frag)
-    val findAllUser  = findUser(Fragment.empty)
-
-    def find(dbres: Res, uname: String) = dbres.use { s =>
-      s.prepare(findSql).flatMap { q =>
-        q.option(uname).map {
-          case Some(u) => u.some
-          case _       => none[UserT]
-        }
-      }
-    }
-
-    def test(dbres: Res, username: String, password: String) =
-      for {
-        d <- insert(dbres, username, password)
-        x <- find(dbres, username)
-      } yield x.count(_.id == d)
-
-  }
-
-
-  object TestTry extends CatsEffectSuite {
-    import UserTry._
-
-    test("findUser") {
-      StartPostgres.singleSession.use { s =>
-        s.prepare(findAllUser).flatMap { q =>
-          q.stream(Void,32).evalTap(u => IO(println(u))).compile.toList
-        }
-      }
-    }
-
-    /*
-    https://stackoverflow.com/questions/60438969/postgresql-npgsql-returning-42601-syntax-error-at-or-near-1
-    using (Npgsql.NpgsqlConnection conn = new Npgsql.NpgsqlConnection(DBManager.GetConnectionString()))
-            {
-                conn.Open();
-                Logger.Info("connection opened for adding column");
-                using (Npgsql.NpgsqlCommand addColumnQuery = new Npgsql.NpgsqlCommand(@"ALTER TABLE @tableName ADD COLUMN IF NOT EXISTS @columnName  @columnType;", conn))
-                {
-                    addColumnQuery.Parameters.AddWithValue("@tableName", tableName);
-                    addColumnQuery.Parameters.AddWithValue("@columnName", columnName);
-                    addColumnQuery.Parameters.AddWithValue("@columnType", columnType);
-                    addColumnQuery.ExecuteNonQuery();
-                }
-            }
-     */
-
-
-  }
-
-
-
 
 
   //gen zu stream + parMap mit pooledSessions
@@ -215,10 +146,11 @@ object PostgresTestTry extends IOApp {
   import StartPostgres._
   //def run(args: List[String]): IO[ExitCode] = trys(brand).as(ExitCode.Success)
   def run(args: List[String]): IO[ExitCode] = {
-    UserTry.test(singleSession, "Ha", "aH") .as(ExitCode.Success)
-    UserTry.test(singleSession, "Sa", "aS") .as(ExitCode.Success)
-    UserTry.test(singleSession, "Mo", "om") .as(ExitCode.Success)
-    UserTry.test(singleSession, "Ad", "da") .as(ExitCode.Success)
+    List(("Ha", "aH"), ("Sa", "aS"), ("Mo", "om"), ("Ad", "da")).traverse((vn) => UserTry.test(singleSession, vn._1, vn._2)).as(ExitCode.Success)
+//    UserTry.test(singleSession, "Ha", "aH") .as(ExitCode.Success)
+//    UserTry.test(singleSession, "Sa", "aS") .as(ExitCode.Success)
+//    UserTry.test(singleSession, "Mo", "om") .as(ExitCode.Success)
+//    UserTry.test(singleSession, "Ad", "da") .as(ExitCode.Success)
   }
 }
 
@@ -253,5 +185,162 @@ object StartPostgres extends App {
       password = Some("postgres"),
       database = "store"
     )
+
+}
+
+
+object UserTry {
+  case class UserT(id: UUID, name: String, pwd: String)
+
+  val codec = (uuid ~ varchar ~ varchar).imap {
+    case id ~ name ~ pwd => UserT(id, name, pwd)
+  } {
+    case u => u.id ~ u.name ~ u.pwd
+  }
+  //val insertSql = sql"insert into users $codec".command
+  val insertSql: Command[((UUID, String), String)] = sql"insert into users VALUES ($uuid, $varchar, $varchar)".command
+
+  def insert(dbres: Res, username: String, password: String) =
+    dbres.use(s => s.prepare(insertSql).flatMap(pc => pc.execute((UUID.randomUUID() ~ username ~ password))))
+  // dbres.use(s => s.prepare(insertSql).flatMap(pc => pc.execute(UserT(UUID.randomUUID(), username, password))))
+
+  val findSql = sql"select * from users where name = $varchar".query(codec)
+
+  def findUser[A]( where : Fragment[A]) = sql"select * from users $where".query(codec)
+  val frag : Fragment[String] =  sql"name = $varchar"
+  def findUserByName( uname: String) = findUser(frag)
+  val findAllUser  = findUser(Fragment.empty)
+
+  def find(dbres: Res, uname: String) = dbres.use { s =>
+    s.prepare(findSql).flatMap { q =>
+      q.option(uname).map {
+        case Some(u) => u.some
+        case _       => none[UserT]
+      }
+    }
+  }
+
+  def test(dbres: Res, username: String, password: String) =
+    for {
+      d <- insert(dbres, username, password)
+      x <- find(dbres, username)
+    } yield x.count(_.id == d)
+
+}
+
+
+object TestTry extends CatsEffectSuite {
+  import UserTry._
+
+  test("findUser") {
+    StartPostgres.singleSession.use { s =>
+      s.prepare(findAllUser).flatMap { q =>
+        q.stream(Void,32).evalTap(u => IO(println(u))).compile.toList
+      }
+    }
+  }
+
+  /*
+  https://stackoverflow.com/questions/60438969/postgresql-npgsql-returning-42601-syntax-error-at-or-near-1
+  using (Npgsql.NpgsqlConnection conn = new Npgsql.NpgsqlConnection(DBManager.GetConnectionString()))
+          {
+              conn.Open();
+              Logger.Info("connection opened for adding column");
+              using (Npgsql.NpgsqlCommand addColumnQuery = new Npgsql.NpgsqlCommand(@"ALTER TABLE @tableName ADD COLUMN IF NOT EXISTS @columnName  @columnType;", conn))
+              {
+                  addColumnQuery.Parameters.AddWithValue("@tableName", tableName);
+                  addColumnQuery.Parameters.AddWithValue("@columnName", columnName);
+                  addColumnQuery.Parameters.AddWithValue("@columnType", columnType);
+                  addColumnQuery.ExecuteNonQuery();
+              }
+          }
+   */
+
+
+}
+
+
+
+
+
+
+//https://tpolecat.github.io/skunk/tutorial/Command.html
+object CommandExampleTry {
+  // a data type
+  case class Pet(name: String, age: Short)
+
+  // a service interface
+  trait PetService[F[_]] {
+    def insert(pet: Pet): F[Unit]
+    def insert(ps: List[Pet]): F[Unit]
+    def selectAll: F[List[Pet]]
+  }
+
+  // a companion with a constructor
+  object PetService {
+
+    // command to insert a pet
+    private val insertOne: Command[Pet] =
+      sql"INSERT INTO pets VALUES ($varchar, $int2)"
+        .command
+        .gcontramap[Pet]
+
+    // command to insert a specific list of pets
+    private def insertMany(ps: List[Pet]): Command[ps.type] = {
+      val enc = (varchar ~ int2).gcontramap[Pet].values.list(ps)
+      sql"INSERT INTO pets VALUES $enc".command
+    }
+
+    // query to select all pets
+    private val all: Query[Void, Pet] =
+      sql"SELECT name, age FROM pets"
+        .query(varchar ~ int2)
+        .gmap[Pet]
+
+    // construct a PetService
+    def fromSession[F[_]: Monad](s: Session[F]): PetService[F] =
+      new PetService[F] {
+        def insert(pet: Pet): F[Unit] = s.prepare(insertOne).flatMap(_.execute(pet)).void
+        def insert(ps: List[Pet]): F[Unit] = s.prepare(insertMany(ps)).flatMap(_.execute(ps)).void
+        def selectAll: F[List[Pet]] = s.execute(all)
+      }
+
+  }
+
+
+  // a source of sessions
+  val session: Resource[IO, Session[IO]] =
+    Session.single(
+      host     = "localhost",
+      user     = "jimmy",
+      database = "world",
+      password = Some("banana"),
+    )
+
+  // a resource that creates and drops a temporary table
+  def withPetsTable(s: Session[IO]): Resource[IO, Unit] = {
+    val alloc = s.execute(sql"CREATE TEMP TABLE pets (name varchar, age int2)".command).void
+    val free  = s.execute(sql"DROP TABLE pets".command).void
+    Resource.make(alloc)(_ => free)
+  }
+
+  // some sample data
+  val bob     = Pet("Bob", 12)
+  val beagles = List(Pet("John", 2), Pet("George", 3), Pet("Paul", 6), Pet("Ringo", 3))
+
+  // our entry point
+  def run(args: List[String]): IO[ExitCode] =
+    session.flatTap(withPetsTable).map(PetService.fromSession(_)).use { s =>
+      for {
+        _  <- s.insert(bob)
+        _  <- s.insert(beagles)
+        ps <- s.selectAll
+        _  <- ps.traverse(p => IO.println(p))
+      } yield ExitCode.Success
+    }
+
+
+
+
 
 }
