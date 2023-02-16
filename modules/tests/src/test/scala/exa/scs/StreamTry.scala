@@ -21,7 +21,7 @@ import java.util.UUID
 /*TestDoku
 Für IOTests:
 Besser IOApp als Worksheet: nur ausgewähltes läuft, kein Rebuild Projekt nötig, damit imports in Worksheet funktionieren
-Besser CatsEffectSuite als IOApp: nur ausgewählten "test" laufen lassen (auch generell ohne IO)
+Besser CatsEffectSuite als IOApp: nur ausgewählten "test" laufen lassen (auch generell ohne IO) - Achtung: class(!!!!) .... extends CatsEffectSuite
  */
 //object StreamTry extends IOApp {
 class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {

@@ -141,18 +141,7 @@ object PostgresSuiteTry {
 
 }
 
-object PostgresTestTry extends IOApp {
-  import PostgresSuiteTry._
-  import StartPostgres._
-  //def run(args: List[String]): IO[ExitCode] = trys(brand).as(ExitCode.Success)
-  def run(args: List[String]): IO[ExitCode] = {
-    List(("Ha", "aH"), ("Sa", "aS"), ("Mo", "om"), ("Ad", "da")).traverse((vn) => UserTry.test(singleSession, vn._1, vn._2)).as(ExitCode.Success)
-//    UserTry.test(singleSession, "Ha", "aH") .as(ExitCode.Success)
-//    UserTry.test(singleSession, "Sa", "aS") .as(ExitCode.Success)
-//    UserTry.test(singleSession, "Mo", "om") .as(ExitCode.Success)
-//    UserTry.test(singleSession, "Ad", "da") .as(ExitCode.Success)
-  }
-}
+
 
 object StartPostgres extends App {
   // os.proc("""C:\se\prog\postgresql\12\bin\pg_ctl.exe""", "runservice",  """-N "postgresql-x64-12"""", """-D "C:\se\prog\postgresql\12\data"""",  "-w")
@@ -197,48 +186,89 @@ object UserTry {
   } {
     case u => u.id ~ u.name ~ u.pwd
   }
-  //val insertSql = sql"insert into users $codec".command
   val insertSql: Command[((UUID, String), String)] = sql"insert into users VALUES ($uuid, $varchar, $varchar)".command
+  val insertSqlC = sql"insert into users VALUES $codec".command
 
   def insert(dbres: Res, username: String, password: String) =
-    dbres.use(s => s.prepare(insertSql).flatMap(pc => pc.execute((UUID.randomUUID() ~ username ~ password))))
-  // dbres.use(s => s.prepare(insertSql).flatMap(pc => pc.execute(UserT(UUID.randomUUID(), username, password))))
+    dbres.use(s => insertS(s,username, password))
+  def insertS(s: Session[IO], username: String, password: String) =
+  //  s.prepare(insertSqlC).flatMap(pc => pc.execute(UserT(UUID.randomUUID(), username, password)))
+    s.prepare(insertSql).flatMap(pc => pc.execute((UUID.randomUUID() ~ username ~ password)))
 
-  val findSql = sql"select * from users where name = $varchar".query(codec)
+  val findSql: Query[String, UserT] = sql"select * from users where name = $varchar".query(codec)
 
-  def findUser[A]( where : Fragment[A]) = sql"select * from users $where".query(codec)
+  def findUser[A]( where : Fragment[A]): Query[A, UserT] = sql"select * from users $where".query(codec)
   val frag : Fragment[String] =  sql"name = $varchar"
-  def findUserByName( uname: String) = findUser(frag)
-  val findAllUser  = findUser(Fragment.empty)
+  def findUserByNameQ: Query[String, UserT] = findUser(frag)
+  val findAllUserQ: Query[Void, UserT] = findUser(Fragment.empty)
 
-  def find(dbres: Res, uname: String) = dbres.use { s =>
-    s.prepare(findSql).flatMap { q =>
+
+  def findS(s: Session[IO], uname: String): IO[Option[UserT]] =
+    s.prepare(findUserByNameQ).flatMap { q =>
       q.option(uname).map {
         case Some(u) => u.some
         case _       => none[UserT]
       }
     }
+
+  def findAllUserS(s : Session[IO]) =  s.prepare(findAllUserQ).flatMap { q =>
+    q.stream(Void,32).evalTap(u => IO(println(u))).compile.toList
   }
 
-  def test(dbres: Res, username: String, password: String) =
+  def findAllUserS(s : Session[IO], uname: String) =  s.prepare(findUserByNameQ).flatMap { pq =>
+    pq.stream(uname, 32).evalTap(u => IO(println(u))).compile.toList
+  }
+
+
+  def find(dbres: Res, uname: String) = dbres.use { s => findS(s, uname) }
+
+  def insertEtFind(dbres: Res, username: String, password: String) =
     for {
       d <- insert(dbres, username, password)
       x <- find(dbres, username)
     } yield x.count(_.id == d)
 
+ def insertEtFindS(s: Session[IO], username: String, password: String): IO[Int] =
+    for {
+      d <- insertS(s, username, password)
+      x <- findAllUserS(s, username)
+    } yield x.count(_.id == d)
+
 }
 
 
-object TestTry extends CatsEffectSuite {
+class TestTry extends CatsEffectSuite {
   import UserTry._
 
+
   test("findUser") {
-    StartPostgres.singleSession.use { s =>
-      s.prepare(findAllUser).flatMap { q =>
-        q.stream(Void,32).evalTap(u => IO(println(u))).compile.toList
-      }
+    StartPostgres.singleSession.use {  findAllUserS }
+  }
+
+  test("single Session") {
+    StartPostgres.singleSession.use( s =>
+      List(("Ha", "aH"), ("Sa", "aS"), ("Mo", "om"), ("Ad", "da")).traverse((vn) => UserTry.insertEtFindS(s, vn._1, vn._2).flatTap(n => IO.println(s"Gefnden mit id $n")) )
+    )
+    //    UserTry.test(singleSession, "Ha", "aH") .as(ExitCode.Success)
+    //    UserTry.test(singleSession, "Sa", "aS") .as(ExitCode.Success)
+    //    UserTry.test(singleSession, "Mo", "om") .as(ExitCode.Success)
+    //    UserTry.test(singleSession, "Ad", "da") .as(ExitCode.Success)
+  }
+
+  test("single SessionRes") {
+      List(("Ha", "aH"), ("Sa", "aS"), ("Mo", "om"), ("Ad", "da")).traverse((vn) => UserTry.insertEtFind(StartPostgres.singleSession, vn._1, vn._2))
+    //    UserTry.test(singleSession, "Ha", "aH") .as(ExitCode.Success)
+    //    UserTry.test(singleSession, "Sa", "aS") .as(ExitCode.Success)
+    //    UserTry.test(singleSession, "Mo", "om") .as(ExitCode.Success)
+    //    UserTry.test(singleSession, "Ad", "da") .as(ExitCode.Success)
+  }
+
+  test("SessionPool") {
+    StartPostgres.pooledSessions.use { resS =>
+      List(("Ha", "aH"), ("Sa", "aS"), ("Mo", "om"), ("Ad", "da")).traverse((vn) => UserTry.insertEtFind(resS, vn._1, vn._2))
     }
   }
+
 
   /*
   https://stackoverflow.com/questions/60438969/postgresql-npgsql-returning-42601-syntax-error-at-or-near-1
