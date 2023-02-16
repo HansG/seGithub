@@ -1,13 +1,15 @@
 package exa
 
-import cats.effect.IO
+import cats.effect.{ Deferred, IO }
 import cats.effect.kernel.Outcome
+import cats.implicits.toTraverseOps
 import munit.CatsEffectSuite
 
 import scala.concurrent.duration._
 import scala.util.Random
 /*
 https://www.baeldung.com/scala/cats-effect-fibers-concurrent-programming
+https://medium.com/@PerrottaFrancisco/learning-cats-effects-concurrency-pt-2-bd9a725ad932
  */
 class CatsTestTry extends CatsEffectSuite {
 
@@ -28,22 +30,21 @@ class CatsTestTry extends CatsEffectSuite {
     } yield out
 
   test("fibExec") {
-    debugIOOut(runIOinIO(io))// Outcome enthält NUR letztes FlatMap !!!?? (hier IO("Task completed")
+    debugIOOut(runIOinIO(io)) // Outcome enthält NUR letztes FlatMap !!!?? (hier IO("Task completed")
   }
 
-  val ioWithCancelationHook = io.onCancel(IO("Applying cancelation finalizer").debug().void)
+  val ioWithCancelationHook = io.onCancel(IO("Applying cancelation finalizer").debug.void)
 
   def fibCancel(io: IO[String]) =
     for {
       fib <- io.start
-      _   <- IO.sleep(100.millis) >> fib.cancel >> IO("Fiber cancelled").debug()
+      _   <- IO.sleep(100.millis) >> fib.cancel >> IO("Fiber cancelled").debug
       out <- fib.join
     } yield out
 
   test("fibCancel") {
-    debugIOOut(fibCancel(io))
-    //   outcome(fibCancel(ioWithCancelationHook))
-    //   fibCancel
+    // debugIOOut(fibCancel(io))
+    debugIOOut(fibCancel(ioWithCancelationHook))
   }
 
   def unpackOut(out: Outcome[IO, Throwable, String]): Either[Throwable, Option[IO[String]]] =
@@ -89,6 +90,39 @@ class CatsTestTry extends CatsEffectSuite {
         )
       }
   }
+
+  //@PerrottaFrancisco
+  test("100 fibers concurrently - main fiber joins on each") {
+    for {
+      state  <- IO.ref(0)
+      fibers <- state.update(_ + 1).start.replicateA(100)
+      _      <- fibers.traverse(_.join).void
+      value  <- state.get
+      _      <- IO.println(s"The final value is: $value")
+    } yield ()
+  }
+
+
+  //@PerrottaFrancisco
+  test("main fiber spawns a fiber that counts down. When countdown=5 -> waits on a Deferred (..completed 5 seconds later by main fiber) main fiber  waits for countdown") {
+    def countdown(n: Int, pause: Int, waiter: Deferred[IO, Unit]): IO[Unit] =
+      IO.println(n) *> IO.defer {
+        if (n == 0) IO.unit
+        else if (n == pause) IO.println("paused...") *> waiter.get *> countdown(n - 1, pause, waiter)
+        else countdown(n - 1, pause, waiter)
+      }
+
+    for {
+      waiter <- IO.deferred[Unit]
+      f <- countdown(10, 5, waiter).start
+      _ <- IO.sleep(5.seconds)
+      _ <- waiter.complete(())
+      _ <- f.join
+      _ <- IO.println("blast off!")
+    } yield ()
+  }
+
+
 
 
   def ioWithTimeout(io : IO[String]): IO[String] = io.timeout(400.millis)
