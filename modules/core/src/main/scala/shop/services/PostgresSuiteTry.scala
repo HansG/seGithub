@@ -3,9 +3,10 @@ package shop.services
 import org.scalacheck.Gen
 import org.scalacheck.Prop._
 import shop.domain.brand.{Brand, BrandId, BrandName}
-import cats.Monad
+import cats.{Applicative, Monad}
 import cats.effect._
 import cats.implicits.{catsSyntaxOptionId, none, toFlatMapOps, toFunctorOps, toTraverseOps}
+import fs2.Stream
 import monocle.Iso
 import munit.{CatsEffectSuite, ScalaCheckEffectSuite}
 import skunk._
@@ -19,6 +20,7 @@ import shop.effects.GenUUID
 import shop.optics.IsUUID
 import shop.services.StartPostgres.Res
 
+import java.time.OffsetDateTime
 import java.util.UUID
 
 
@@ -117,8 +119,8 @@ class PostgresSuiteTry extends CatsEffectSuite {
 
   val flushTables: Command[Void] = sql"DELETE FROM #brands".command
 
-  def trys(res : Res, brand: BrandT): IO[Unit] =
-    res.flatTap(withTempTable).map(BrandsT.make)
+  def findCreate2(res : Res, brand: BrandT): IO[Unit] =
+    res.flatTap(withTempTable).map(BrandsT.make(_)(GenUUID[IO], MonadCancelThrow[IO]))
     .use { bs =>
       for {
         x <- bs.findAll
@@ -135,19 +137,18 @@ class PostgresSuiteTry extends CatsEffectSuite {
   val brand: BrandT = brandTGen.sample.get
   val brandL: List[BrandT] = brandTLGen.sample.get
 
-  import GenUUID.forSync
   test("single brand") {
-    trys(singleSession, brand)
+    findCreate2(singleSession, brand)
   }
 
   test("list brand") {
-    brandL.traverse(br =>  trys(singleSession, br))
+    brandL.traverse(br =>  findCreate2(singleSession, br))
   }
 
   test("list brand") {
    PropF.forAllF(brandTGen) { brand =>
     //   forAll(brandTGen) { brand =>
-      trys(singleSession, brand).as(())
+      findCreate2(singleSession, brand).as(())
     }
   }
 
@@ -329,6 +330,7 @@ class CommandExampleTry extends CatsEffectSuite with ScalaCheckEffectSuite {
   trait PetService[F[_]] {
     def insert(pet: Pet): F[Unit]
     def insert(ps: List[Pet]): F[Unit]
+    def tryInsertAll(pets: List[Pet]): F[Unit]
     def selectAll: F[List[Pet]]
   }
 
@@ -353,13 +355,43 @@ class CommandExampleTry extends CatsEffectSuite with ScalaCheckEffectSuite {
         .query(varchar ~ int2)
         .gmap[Pet]
 
-    // construct a PetService
-    def fromSession[F[_]: Monad](s: Session[F]): PetService[F] =
+    // construct a PetService, preparing our statement once on construction
+    def fromSession[F[_]: Monad: MonadCancelThrow](s: Session[F]): F[PetService[F]]  =
+      s.prepare(insertOne).map { pc =>
+        new PetService[F] {
+
+          // Attempt to insert all pets, in a single transaction, handling each in turn and rolling
+          // back to a savepoint if a unique violation is encountered. Note that a bulk insert with an
+          // ON CONFLICT clause would be much more efficient, this is just for demonstration.
+          def tryInsertAll(pets: List[Pet]): F[Unit] =
+            s.transaction.use { xa =>
+              pets.traverse_ { p =>
+                for {
+                  _ <- IO.println(s"Trying to insert $p")
+                  sp <- xa.savepoint
+                  _ <- pc.execute(p).recoverWith {
+                    case SqlState.UniqueViolation(ex) =>
+                      IO.println(s"Unique violation: ${ex.constraintName.getOrElse("<unknown>")}, rolling back...") *>
+                        xa.rollback(sp)
+                  }
+                } yield ()
+              }
+            }
+
+          def insert(pet: Pet): F[Unit] = pc.execute(pet)).void
+
+          def insert(ps: List[Pet]): F[Unit] = s.prepare(insertMany(ps)).flatMap(_.execute(ps)).void
+
+          def selectAll: F[List[Pet]] = s.execute(all)
+        }
+      }
+    /*
       new PetService[F] {
         def insert(pet: Pet): F[Unit] = s.prepare(insertOne).flatMap(_.execute(pet)).void
         def insert(ps: List[Pet]): F[Unit] = s.prepare(insertMany(ps)).flatMap(_.execute(ps)).void
         def selectAll: F[List[Pet]] = s.execute(all)
       }
+*/
 
   }
 
@@ -375,32 +407,128 @@ class CommandExampleTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
   // a resource that creates and drops a temporary table
   def withPetsTable(s: Session[IO]): Resource[IO, Unit] = {
-    val alloc = s.execute(sql"CREATE TEMP TABLE pets (name varchar, age int2)".command).void
+    val alloc = s.execute(sql"CREATE TEMP TABLE pets (name varchar unique, age int2)".command).void
     val free  = s.execute(sql"DROP TABLE pets".command).void
     Resource.make(alloc)(_ => free)
   }
 
-  // some sample data
-  val bob     = Pet("Bob", 12)
-  val beagles = List(Pet("John", 2), Pet("George", 3), Pet("Paul", 6), Pet("Ringo", 3))
 
   // our entry point
   //  def run(args: List[String]): IO[ExitCode] =    ExitCode.Success
-  test("with temp") {
+  test("insert et select") {
     session.flatTap(withPetsTable).map(PetService.fromSession(_)).use { s =>
       for {
-        _  <- s.insert(bob)
-        _  <- s.insert(beagles)
+        _ <- s.insert(bob)
+        _ <- s.insert(beagles)
         ps <- s.selectAll
-        _  <- ps.traverse(p => IO.println(p))
+        _ <- ps.traverse(p => IO.println(p))
       } yield ()
     }
   }
 
-  test("noop"){
+  test("noop") {
     IO(println("noop"))
   }
 
+
+  // We can monitor the changing transaction status by tapping into the provided `fs2.Signal`
+  def withTransactionStatusLogger[A](ss: Session[IO]): Resource[IO, Unit] = {
+    val alloc: IO[Fiber[IO, Throwable, Unit]] =
+      ss.transactionStatus
+        .discrete
+        .changes
+        .evalMap(s => IO.println(s"xa status: $s"))
+        .compile
+        .drain
+        .start
+    Resource.make(alloc)(_.cancel).void
+  }
+
+  // A resource that puts it all together.
+  val resource: Resource[IO, PetService[IO]] =
+    for {
+      s <- session
+      _ <- withPetsTable(s)
+      _ <- withTransactionStatusLogger(s)
+      ps <- Resource.eval(PetService.fromSession(s))
+    } yield ps
+
+
+  // some sample data
+  val bob     = Pet("Bob", 12)
+  val beagles = List(Pet("John", 2), Pet("George", 3), Pet("Paul", 6), Pet("Ringo", 3))
+  val pets = List(
+    Pet("Alice", 3),
+    Pet("Bob", 42),
+    Pet("Bob", 21),
+    Pet("Steve", 9)
+  )
+
+    test("tryinsert et select") {
+      resource.use { ps =>
+        for {
+          _ <- ps.tryInsertAll(pets)
+          all <- ps.selectAll
+          _ <- all.traverse_(p => IO.println(p))
+        } yield ExitCode.Success
+      }
+    }
+
+
+
+  // a data model
+  case class Country(name: String, code: String, population: Int)
+
+  // A service interface.
+  trait Service[F[_]] {
+    def currentTimestamp: F[OffsetDateTime]
+    def countriesByName(pat: String): Stream[F, Country]
+  }
+
+  // A companion with a constructor.
+  object Service {
+
+    private val timestamp: Query[Void, OffsetDateTime] =
+      sql"select current_timestamp".query(timestamptz)
+
+    private val countries: Query[String, Country] =
+      sql"""
+        SELECT name, code, population
+        FROM   country
+        WHERE  name like $text
+      """.query(varchar ~ bpchar(3) ~ int4)
+         .gmap[Country]
+
+    def fromSession[F[_]: Applicative](s: Session[F]): F[Service[F]] =
+      s.prepare(countries).map { pq =>
+
+        // Our service implementation. Note that we are preparing the query on construction, so
+        // our service can run it many times without paying the planning cost again.
+        new Service[F] {
+          def currentTimestamp: F[OffsetDateTime] = s.unique(timestamp)
+          def countriesByName(pat: String): Stream[F,Country] = pq.stream(pat, 32)
+        }
+
+      }
+  }
+
+  // A source of services
+  val service: Resource[IO, Service[IO]] =
+    session.evalMap(Service.fromSession(_))
+
+  // our entry point ... there is no indication that we're using a database at all!
+  test("service test") {
+    service.use { s =>
+      for {
+        ts <- s.currentTimestamp
+        _ <- IO.println(s"timestamp is $ts")
+        _ <- s.countriesByName("U%")
+          .evalMap(c => IO.println(c))
+          .compile
+          .drain
+      } yield ()
+    }
+  }
 
 
 }
