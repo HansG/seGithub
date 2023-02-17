@@ -7,23 +7,25 @@ import cats.Monad
 import cats.effect._
 import cats.implicits.{catsSyntaxOptionId, none, toFlatMapOps, toFunctorOps, toTraverseOps}
 import monocle.Iso
-import munit.CatsEffectSuite
+import munit.{CatsEffectSuite, ScalaCheckEffectSuite}
 import skunk._
 import skunk.implicits._
 import skunk.codec.all._
 import natchez.Trace.Implicits.noop
+import org.scalacheck.effect.PropF
 import shop.domain.ID
 import shop.domain.auth.{EncryptedPassword, UserName}
 import shop.effects.GenUUID
 import shop.optics.IsUUID
-import shop.services.PostgresSuiteTry.Res
+import shop.services.StartPostgres.Res
 
 import java.util.UUID
 
-object PostgresSuiteTry extends CatsEffectSuite {
+
+
+class PostgresSuiteTry extends CatsEffectSuite {
   import StartPostgres._
 
-  type Res = Resource[IO, Session[IO]]
 
   case class BrandIdT(value: UUID)
   object BrandIdT {
@@ -60,21 +62,23 @@ object PostgresSuiteTry extends CatsEffectSuite {
 
   object BrandsT {
     def make[F[_]: GenUUID: MonadCancelThrow](
-        postgres: Resource[F, Session[F]]
+        session:  Session[F]
+      //  postgres: Resource[F, Session[F]]
     ): BrandsT[F] =
       new BrandsT[F] {
 
         def findAll: F[List[BrandT]] =
-          postgres.use(_.execute(selectAll))
+          session.execute(selectAll)
+        //  postgres.use(_.execute(selectAll))
 
         def create(name: BrandNameT): F[BrandIdT] =
-          postgres.use { session =>
+       //   postgres.use { session =>
             session.prepare(insertBrand).flatMap { cmd =>
               ID.make[F, BrandIdT].flatMap { id =>
                 cmd.execute(BrandT(id, name)).as(id)
               }
             }
-          }
+      //    }
       }
   }
 
@@ -113,33 +117,37 @@ object PostgresSuiteTry extends CatsEffectSuite {
 
   val flushTables: Command[Void] = sql"DELETE FROM #brands".command
 
+  def trys(res : Res, brand: BrandT): IO[Unit] =
+    res.flatTap(withTempTable).map(BrandsT.make)
+    .use { bs =>
+      for {
+        x <- bs.findAll
+        _ <- bs.create(brand.name)
+        y <- bs.findAll
+        z <- bs.create(brand.name).attempt
+      } yield println(
+        x.toString() + "\n" + (y.count(_.name == brand.name) == 1) + "\n" + (z
+          .fold(_.printStackTrace(), "Neu: " + _.toString))
+      )
+    }
 
-  def trys(brand: BrandT): IO[Unit] =
-    for {
-      x <- brandTSession.findAll
-      _ <- brandTSession.create(brand.name)
-      y <- brandTSession.findAll
-      z <- brandTSession.create(brand.name).attempt
-    } yield println(
-      x.toString() + "\n" + (y.count(_.name == brand.name) == 1) + "\n" + (z
-        .fold(_.printStackTrace(), "Neu: " + _.toString))
-    )
-
-  val brandTSession = BrandsT.make[IO](singleSession)
+  def brandTFromSession(s : Session[IO]) = BrandsT.make[IO](s)
   val brand: BrandT = brandTGen.sample.get
   val brandL: List[BrandT] = brandTLGen.sample.get
 
+  import GenUUID.forSync
   test("single brand") {
-    trys(brand)
+    trys(singleSession, brand)
   }
 
   test("list brand") {
-    brandL.traverse(trys)
+    brandL.traverse(br =>  trys(singleSession, br))
   }
 
   test("list brand") {
-    forAll(brandTGen) { brand =>
-      trys(brand).as(passed)
+   PropF.forAllF(brandTGen) { brand =>
+    //   forAll(brandTGen) { brand =>
+      trys(singleSession, brand).as(())
     }
   }
 
@@ -154,6 +162,8 @@ object PostgresSuiteTry extends CatsEffectSuite {
 
 
 object StartPostgres extends App {
+  type Res = Resource[IO, Session[IO]]
+
   // os.proc("""C:\se\prog\postgresql\12\bin\pg_ctl.exe""", "runservice",  """-N "postgresql-x64-12"""", """-D "C:\se\prog\postgresql\12\data"""",  "-w")
 
 //    Sync[F].delay(new Configuration(system))
@@ -164,6 +174,12 @@ object StartPostgres extends App {
     .useForever
 //    .map { new JaegerEntryPoint[F](_, uriPrefix) }
 
+  // a resource that creates and drops a temporary table
+  def withTempTable(s: Session[IO]): Resource[IO, Unit] = {
+    val alloc = s.execute(sql"CREATE TEMP TABLE teta (name varchar, age int2)".command).void
+    val free  = s.execute(sql"DROP TABLE teta".command).void
+    Resource.make(alloc)(_ => free)
+  }
 
 
   lazy val pooledSessions: Resource[IO, Resource[IO, Session[IO]]] =
@@ -305,7 +321,7 @@ class TestTry extends CatsEffectSuite {
 
 
 //https://tpolecat.github.io/skunk/tutorial/Command.html
-object CommandExampleTry {
+class CommandExampleTry extends CatsEffectSuite with ScalaCheckEffectSuite {
   // a data type
   case class Pet(name: String, age: Short)
 
@@ -369,17 +385,21 @@ object CommandExampleTry {
   val beagles = List(Pet("John", 2), Pet("George", 3), Pet("Paul", 6), Pet("Ringo", 3))
 
   // our entry point
-  def run(args: List[String]): IO[ExitCode] =
+  //  def run(args: List[String]): IO[ExitCode] =    ExitCode.Success
+  test("with temp") {
     session.flatTap(withPetsTable).map(PetService.fromSession(_)).use { s =>
       for {
         _  <- s.insert(bob)
         _  <- s.insert(beagles)
         ps <- s.selectAll
         _  <- ps.traverse(p => IO.println(p))
-      } yield ExitCode.Success
+      } yield ()
     }
+  }
 
-
+  test("noop"){
+    IO(println("noop"))
+  }
 
 
 

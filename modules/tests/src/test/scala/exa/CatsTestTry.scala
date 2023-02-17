@@ -33,12 +33,12 @@ class CatsTestTry extends CatsEffectSuite {
     debugIOOut(runIOinIO(io)) // Outcome enthält NUR letztes FlatMap !!!?? (hier IO("Task completed")
   }
 
-  val ioWithCancelationHook = io.onCancel(IO("Applying cancelation finalizer").debug.void)
+  val ioWithCancelationHook = io.onCancel(IO("Applying cancelation finalizer").debug().void)
 
   def fibCancel(io: IO[String]) =
     for {
       fib <- io.start
-      _   <- IO.sleep(100.millis) >> fib.cancel >> IO("Fiber cancelled").debug
+      _   <- IO.sleep(100.millis) >> fib.cancel >> IO("Fiber cancelled").debug()
       out <- fib.join
     } yield out
 
