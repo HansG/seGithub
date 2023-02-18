@@ -33,6 +33,9 @@ import natchez.Trace.Implicits.noop
   *
   *  curl -i http://localhost:8080/country/USA
   *  curl -i http://localhost:8080/country/foobar
+ *
+ *
+ *  #testtool mit json Ausgabe (und Eingabe) https://reqbin.com/
   *
   */
 class Http4sExample   {
