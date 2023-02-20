@@ -13,15 +13,14 @@ resolvers += Resolver.sonatypeRepo("snapshots")
 resolvers += Resolver.mavenCentral
 resolvers += "mvnrepository" at "https://mvnrepository.com/artifact"
 //resolvers += "Local Maven Repository" at "file://D:/se/m2/repository"
-resolvers += "Local Maven Repository" at "file://"+Path.userHome.absolutePath+"/.m2/repository"
-
+resolvers += "Local Maven Repository" at "file://" + Path.userHome.absolutePath + "/.m2/repository"
 
 def dep(org: String, prefix: String, version: String)(modules: String*)(testModules: String*) =
-  modules.map(m => org %% (prefix ++ m) % version) ++
+  modules.map(m => org       %% (prefix ++ m) % version) ++
     testModules.map(m => org %% (prefix ++ m) % version) //% Test
 
-addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.13.2" cross CrossVersion.full)
-addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
+addCompilerPlugin("org.typelevel" %% "kind-projector"     % "0.13.2" cross CrossVersion.full)
+addCompilerPlugin("com.olegpy"    %% "better-monadic-for" % "0.3.1")
 
 val scalafixCommonSettings = inConfig(IntegrationTest)(scalafixConfigSettings(IntegrationTest))
 lazy val root = (project in file("."))
@@ -55,10 +54,9 @@ lazy val tests = (project in file("modules/tests"))
       dep("org.typelevel", "cats-effect", "3.3.12")("")("-laws", "-testkit") ++
       dep("org.scalameta", "munit", "0.7.29")()("", "-scalacheck") ++
       dep("org.typelevel", "", "1.0.7")()("munit-cats-effect-3") ++
-      dep("org.typelevel",  "scalacheck-effect", "1.0.3")()("", "-munit")
+      dep("org.typelevel", "scalacheck-effect", "1.0.3")()("", "-munit")
   )
   .dependsOn(core)
-
 
 lazy val javaFXModules = Seq("base", "controls", "fxml", "graphics", "media", "swing", "web")
 
@@ -69,7 +67,13 @@ lazy val core = (project in file("modules/core"))
   .settings(
     name := "shopping-cart-core",
     Docker / packageName := "shopping-cart",
-    scalacOptions ++= List("-Ymacro-annotations", "-Yrangepos", "-Wconf:cat=unused:info", "-language:higherKinds", "-Ydelambdafy:inline"),
+    scalacOptions ++= List(
+      "-Ymacro-annotations",
+      "-Yrangepos",
+      "-Wconf:cat=unused:info",
+      "-language:higherKinds",
+      "-Ydelambdafy:inline"
+    ),
     scalafmtOnCompile := true,
     resolvers += Resolver.sonatypeRepo("snapshots"),
     Defaults.itSettings,
@@ -114,44 +118,42 @@ lazy val core = (project in file("modules/core"))
       Libraries.skunkCore,
       Libraries.skunkCirce,
       Libraries.squants,
-     // "com.lihaoyi" %% "ammonite" % "2.5.3" cross CrossVersion.full
-      "com.lihaoyi" %% "ammonite" % "2.5.4" cross CrossVersion.full,
-      "com.github.scopt" %% "scopt" % "4.1.0",
-      "org.tpolecat" %% "natchez-core" % natchezVersion,
-      "org.tpolecat" %% "natchez-jaeger" % natchezVersion,
-      "org.tpolecat" %% "natchez-honeycomb" % natchezVersion,
-        Libraries.catsLaws,
-    Libraries.log4catsNoOp,
-    Libraries.monocleLaw,
-    Libraries.refinedScalacheck,
-    Libraries.weaverCats,
-    Libraries.weaverDiscipline,
-    Libraries.logback % Runtime,
-    Libraries.weaverScalaCheck
-  ),
+      // "com.lihaoyi" %% "ammonite" % "2.5.3" cross CrossVersion.full
+      "com.lihaoyi"        %% "ammonite"            % "2.5.4" cross CrossVersion.full,
+      "com.github.scopt"   %% "scopt"               % "4.1.0",
+      "org.tpolecat"       %% "natchez-core"        % natchezVersion,
+      "org.tpolecat"       %% "natchez-jaeger"      % natchezVersion,
+      "org.tpolecat"       %% "natchez-honeycomb"   % natchezVersion,
+      "io.github.kirill5k" %% "mongo4cats-core"     % "0.6.7",
+      "io.github.kirill5k" %% "mongo4cats-circe" % "0.6.7",
+      "io.github.kirill5k" %% "mongo4cats-embedded" % "0.6.7",
+      Libraries.catsLaws,
+      Libraries.log4catsNoOp,
+      Libraries.monocleLaw,
+      Libraries.refinedScalacheck,
+      Libraries.weaverCats,
+      Libraries.weaverDiscipline,
+      Libraries.logback % Runtime,
+      Libraries.weaverScalaCheck
+    ),
     libraryDependencies ++= javaFXModules.map(m => "org.openjfx" % s"javafx-$m" % "11" classifier "win")
       ++
-      dep("org.typelevel", "cats-effect", "3.3.12")("")("-laws", "-testkit") ++
+        dep("org.typelevel", "cats-effect", "3.3.12")("")("-laws", "-testkit") ++
       dep("org.scalameta", "munit", "0.7.29")()("", "-scalacheck") ++
       dep("org.typelevel", "", "1.0.7")()("munit-cats-effect-3") ++
-      dep("org.typelevel",  "scalacheck-effect", "1.0.3")()("", "-munit")
-
+      dep("org.typelevel", "scalacheck-effect", "1.0.3")()("", "-munit")
   )
 
 addCommandAlias("runLinter", ";scalafixAll --rules OrganizeImports")
 
-
 (fullClasspath in Runtime) ++= {
-  (updateClassifiers in Runtime).value
-  .configurations
-  .find(_.configuration.name == Test.name)
-  .get
-  .modules
-  .flatMap(_.artifacts)
-  .collect{case (a, f) if a.classifier == Some("sources") => f}
+  (updateClassifiers in Runtime).value.configurations
+    .find(_.configuration.name == Test.name)
+    .get
+    .modules
+    .flatMap(_.artifacts)
+    .collect { case (a, f) if a.classifier == Some("sources") => f }
 }
-
-
 /*
 fullClasspath  ++= {
   updateClassifiers.value
@@ -160,4 +162,4 @@ fullClasspath  ++= {
     .flatMap(_.artifacts)
     .collect{case (a, f) if a.classifier == Some("sources") => f}
 }
-*/
+ */
