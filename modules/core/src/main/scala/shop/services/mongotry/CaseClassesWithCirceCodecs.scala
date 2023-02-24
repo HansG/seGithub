@@ -16,31 +16,60 @@
 
 package shop.services.mongotry
 
+import cats.Show
+import cats.conversions.all.autoNarrowContravariant
 import cats.effect.{IO, IOApp}
+import cats.implicits.toContravariantOps
 import derevo.cats.{eqv, show}
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
+import dev.profunktor.auth.jwt.JwtToken
+import io.circe.{Decoder, Encoder, Json, JsonObject}
 import io.circe.generic.auto._
 import mongo4cats.client.MongoClient
 import mongo4cats.circe._
-import org.bson.codecs.configuration.CodecRegistry
+import org.bson.codecs.configuration.{CodecRegistries, CodecRegistry}
+import shop.domain.brand.BrandParam
+import shop.domain.cart.Cart
+import skunk.syntax.id
 
 import java.time.Instant
+import scala.util.{Success, Try}
 
 object CaseClassesWithCirceCodecs extends IOApp.Simple {
 
-  @derive(decoder, encoder, eqv, show)
+  @derive(decoder, encoder,  show)
   final case class Address(city: String, country: String)
-  @derive(decoder, encoder, eqv, show)
+  @derive(decoder, encoder, show)
   final case class Person(firstName: String, lastName: String, address: Address, registrationDate: Instant)
+
+//  object Instant {
+// }
+ // val dateTag = "$date"
+
+  implicit val jsonEncoder: Encoder[Cart] =
+    Encoder.forProduct1("items")(_.items)
+  implicit val jsonDecoder: Decoder[Cart] =
+    Decoder.forProduct1("items")(Cart.apply)
+
+
+  val defaultInstant = Try(Instant.parse(("1900-01-01T00:00:00.000+00:00")))
+
+  implicit val instantEncoder: Encoder[Instant] =
+    Encoder.forProduct1("registrationDate")(i =>  i.toString)
+  implicit val instantDecoder: Decoder[Instant] =
+    Decoder.forProduct1("registrationDate") ((dateS:String) => Instant.parse(dateS.toString))
+ //   Decoder[String].emapTry(dateTag => Try(Instant.parse(dateTag)).fold(_ => defaultInstant, i =>  Try(i) ))
+  implicit val instantShow: Show[Instant] =Show[String].contramap[Instant](_.toString)
+
 
   override val run: IO[Unit] =
     MongoClient.fromConnectionString[IO]("mongodb://localhost:27017").use { client =>
       for {
         db   <- client.getDatabase("testdb")
     //    coll <- db.getCollectionWithCodec[Person]("people")
-        coll <- db.getCollection[Person]("people", CodecRegistry)
-        person = Person("John", "Bloggs", Address("New-York", "USA"), Instant.now())
+        coll <- db.getCollectionWithCodec[Person]("people")
+        person = Person("Bibi", "Bloggsberg", Address("New-York", "USA"), Instant.now())
         _    <- coll.insertOne(person)
         docs <- coll.find.stream.compile.toList
         _    <- IO.println(docs)
