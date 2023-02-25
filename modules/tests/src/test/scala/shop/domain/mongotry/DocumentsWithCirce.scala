@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package shop.services.mongotry
+package shop.domain.mongotry
 
 import io.circe.generic.auto._
 import mongo4cats.bson.{Document, ObjectId}

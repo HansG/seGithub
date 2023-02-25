@@ -8,6 +8,7 @@ import cats.effect._
 import cats.effect.std.Console
 import cats.implicits.{catsSyntaxApplicativeError, catsSyntaxApply, catsSyntaxOptionId, none, toFlatMapOps, toFoldableOps, toFunctorOps, toTraverseOps}
 import fs2.Stream
+import mongo4cats.client.MongoClient
 import monocle.Iso
 import munit.{CatsEffectSuite, ScalaCheckEffectSuite}
 import skunk._
@@ -72,6 +73,26 @@ class PostgresSuiteTry extends CatsEffectSuite {
 
         def findAll: F[List[BrandT]] =
           session.execute(selectAll)
+        //  postgres.use(_.execute(selectAll))
+
+        def create(name: BrandNameT): F[BrandIdT] =
+       //   postgres.use { session =>
+            session.prepare(insertBrand).flatMap { cmd =>
+              ID.make[F, BrandIdT].flatMap { id =>
+                cmd.execute(BrandT(id, name)).as(id)
+              }
+            }
+      //    }
+      }
+
+    def makeMG[F[_]: GenUUID: MonadCancelThrow](
+        client: MongoClient[F]
+      //  postgres: Resource[F, Session[F]]
+    ): BrandsT[F] =
+      new BrandsT[F] {
+        client.getDatabase("store")
+        def findAll: F[List[BrandT]] =
+          client.
         //  postgres.use(_.execute(selectAll))
 
         def create(name: BrandNameT): F[BrandIdT] =
@@ -202,6 +223,8 @@ object StartPostgres extends App {
       password = Some("postgres"),
       database = "store"
     )
+
+  lazy val mongodbIO = MongoClient.fromConnectionString[IO]("mongodb://localhost:27017").map(client =>   client.getDatabase("testdb"))
 
 }
 

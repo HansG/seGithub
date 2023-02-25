@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package shop.services.mongotry
+package shop.domain.mongotry
 
 import mongo4cats.bson.{BsonValue, Document, ObjectId}
 

@@ -55,6 +55,21 @@ object PostgresSuite extends ResourceSuite {
     }
   }
 
+  test("Brands MG") { postgres =>
+    forall(brandGen) { brand =>
+      val b = Brands.make[IO](postgres)
+      for {
+        x <- b.findAll
+        _ <- b.create(brand.name)
+        y <- b.findAll
+        z <- b.create(brand.name).attempt
+      } yield expect.all(x.isEmpty, y.count(_.name == brand.name) === 1, z.isLeft)
+    }
+  }
+
+
+
+
   test("Categories") { postgres =>
     forall(categoryGen) { category =>
       val c = Categories.make[IO](postgres)

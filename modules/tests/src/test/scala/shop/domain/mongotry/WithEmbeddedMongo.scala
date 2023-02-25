@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package shop.services.mongotry
+package shop.domain.mongotry
 
 import cats.effect.{IO, IOApp}
 import de.flapdoodle.embed.mongo.distribution.Version

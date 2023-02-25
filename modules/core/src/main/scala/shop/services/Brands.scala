@@ -4,9 +4,10 @@ import shop.domain.ID
 import shop.domain.brand._
 import shop.effects.GenUUID
 import shop.sql.codecs._
-
 import cats.effect._
 import cats.syntax.all._
+import fs2.Stream
+import mongo4cats.database.GenericMongoDatabase
 import skunk._
 import skunk.implicits._
 
@@ -34,6 +35,10 @@ object Brands {
           }
         }
     }
+
+  def makeMG[F[_]: GenUUID: MonadCancelThrow](
+                                               mg : F[GenericMongoDatabase[IO, Stream[F, *]]]
+                                           ): Brands[F] = ???
 }
 
 private object BrandSQL {

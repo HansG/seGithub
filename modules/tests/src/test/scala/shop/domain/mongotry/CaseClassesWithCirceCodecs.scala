@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package shop.services.mongotry
+package shop.domain.mongotry
 
 import cats.Show
 import cats.conversions.all.autoNarrowContravariant
@@ -64,13 +64,14 @@ object CaseClassesWithCirceCodecs extends IOApp.Simple {
 
 
   override val run: IO[Unit] =
-    MongoClient.fromConnectionString[IO]("mongodb://localhost:27017").use { client =>
+   //MongoClient.fromConnectionString[IO]("mongodb://localhost:27017").use { client =>
+    MongoClient.fromConnectionString[IO]("mongodb://localhost:27017").map(client =>   client.getDatabase("testdb")).use { dbio =>
       for {
-        db   <- client.getDatabase("testdb")
-    //    coll <- db.getCollectionWithCodec[Person]("people")
+      //  db   <- client.getDatabase("testdb")
+        db   <- dbio
         coll <- db.getCollectionWithCodec[Person]("people")
-        person = Person("Bibi", "Bloggsberg", Address("New-York", "USA"), Instant.now())
-        _    <- coll.insertOne(person)
+//        persons = 1.to(5).map( i => Person("Bib"+i, "Bloggs" +i+"berg", Address("München", "GER"), Instant.now()))
+//        _    <- coll.insertMany(persons)
         docs <- coll.find.stream.compile.toList
         _    <- IO.println(docs)
       } yield ()
