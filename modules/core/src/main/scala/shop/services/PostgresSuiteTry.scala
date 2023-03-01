@@ -8,7 +8,10 @@ import cats.effect._
 import cats.effect.std.Console
 import cats.implicits.{catsSyntaxApplicativeError, catsSyntaxApply, catsSyntaxOptionId, none, toFlatMapOps, toFoldableOps, toFunctorOps, toTraverseOps}
 import fs2.Stream
+import mongo4cats.circe.deriveCirceCodecProvider
 import mongo4cats.client.MongoClient
+import mongo4cats.collection.GenericMongoCollection
+import mongo4cats.database.GenericMongoDatabase
 import monocle.Iso
 import munit.{CatsEffectSuite, ScalaCheckEffectSuite}
 import skunk._
@@ -85,17 +88,28 @@ class PostgresSuiteTry extends CatsEffectSuite {
       //    }
       }
 
-    def makeMG[F[_]: GenUUID: MonadCancelThrow](
+    def makeMG[F[_]: GenUUID: MonadCancelThrow: Sync](
         client: MongoClient[F]
       //  postgres: Resource[F, Session[F]]
-    ): BrandsT[F] =
-      new BrandsT[F] {
-        client.getDatabase("store")
-        def findAll: F[List[BrandT]] =
-          client.
+    ): Brands[F] =
+      new Brands[F] {
+        lazy val collF: F[GenericMongoCollection[F, Brand, Stream[F, *]]] =
+        for {
+          db  <- client.getDatabase("store")
+          coll  <- db.getCollectionWithCodec[Brand]("brands")
+        } yield coll
+
+        def findAll: F[List[Brand]] = {
+          for {
+            coll  <- collF
+            //        persons = 1.to(5).map( i => Person("Bib"+i, "Bloggs" +i+"berg", Address("München", "GER"), Instant.now()))
+            //        _    <- coll.insertMany(persons)
+            docs <- coll.find.stream.compile.toList
+          } yield docs
+        }
         //  postgres.use(_.execute(selectAll))
 
-        def create(name: BrandNameT): F[BrandIdT] =
+        def create(name: BrandName): F[BrandId] =
        //   postgres.use { session =>
             session.prepare(insertBrand).flatMap { cmd =>
               ID.make[F, BrandIdT].flatMap { id =>

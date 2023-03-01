@@ -18,7 +18,7 @@ package shop.domain.mongotry
 
 import cats.Show
 import cats.conversions.all.autoNarrowContravariant
-import cats.effect.{IO, IOApp}
+import cats.effect.{IO, IOApp, Resource}
 import cats.implicits.toContravariantOps
 import derevo.cats.{eqv, show}
 import derevo.circe.magnolia.{decoder, encoder}
@@ -26,17 +26,28 @@ import derevo.derive
 import dev.profunktor.auth.jwt.JwtToken
 import io.circe.{Decoder, Encoder, Json, JsonObject}
 import io.circe.generic.auto._
+import mongo4cats.bson.ObjectId
 import mongo4cats.client.MongoClient
 import mongo4cats.circe._
+import mongo4cats.operations.Filter
+import munit.CatsEffectSuite
 import org.bson.codecs.configuration.{CodecRegistries, CodecRegistry}
 import shop.domain.brand.BrandParam
 import shop.domain.cart.Cart
 import skunk.syntax.id
 
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import scala.util.{Success, Try}
 
-object CaseClassesWithCirceCodecs extends IOApp.Simple {
+object CaseClassesWithCirceCodecs extends CatsEffectSuite {
+
+  def mongoClientRes:  Resource[IO, MongoClient[IO]] = {
+    MongoClient.fromConnectionString[IO]("mongodb://localhost:27017")
+  }
+
+
+
 
   @derive(decoder, encoder,  show)
   final case class Address(city: String, country: String)
@@ -63,17 +74,56 @@ object CaseClassesWithCirceCodecs extends IOApp.Simple {
   implicit val instantShow: Show[Instant] =Show[String].contramap[Instant](_.toString)
 
 
-  override val run: IO[Unit] =
-   //MongoClient.fromConnectionString[IO]("mongodb://localhost:27017").use { client =>
-    MongoClient.fromConnectionString[IO]("mongodb://localhost:27017").map(client =>   client.getDatabase("testdb")).use { dbio =>
+  test("Person Codec") {
+    //MongoClient.fromConnectionString[IO]("mongodb://localhost:27017").use { client =>
+    mongoClientRes.map(client =>   client.getDatabase("testdb")).use { dbio =>
       for {
-      //  db   <- client.getDatabase("testdb")
+        //  db   <- client.getDatabase("testdb")
         db   <- dbio
         coll <- db.getCollectionWithCodec[Person]("people")
-//        persons = 1.to(5).map( i => Person("Bib"+i, "Bloggs" +i+"berg", Address("München", "GER"), Instant.now()))
-//        _    <- coll.insertMany(persons)
+        //        persons = 1.to(5).map( i => Person("Bib"+i, "Bloggs" +i+"berg", Address("München", "GER"), Instant.now()))
+        //        _    <- coll.insertMany(persons)
         docs <- coll.find.stream.compile.toList
         _    <- IO.println(docs)
       } yield ()
     }
+  }
+
+
+
+  sealed trait PaymentMethod
+  final case class CreditCard(name: String, number: String, expiry: String, cvv: Int) extends PaymentMethod
+  final case class Paypal(email: String)                                              extends PaymentMethod
+
+  final case class Payment(
+                            id: ObjectId,
+                            amount: BigDecimal,
+                            method: PaymentMethod,
+                            date: Instant
+                          )
+
+  test("encode and decode case classes that extend sealed traits")  {
+    val ts = Instant.parse("2020-01-01T00:00:00Z")
+    val p1 = Payment(ObjectId(), BigDecimal(10), Paypal("foo@bar.com"), ts.plus(1, ChronoUnit.DAYS))
+    val p2 = Payment(ObjectId(), BigDecimal(25), CreditCard("John Bloggs", "1234", "1021", 123), ts.plus(2, ChronoUnit.DAYS))
+
+    //withEmbeddedMongoClient { client =>
+    mongoClientRes.use { client =>
+      val result = for {
+        db       <- client.getDatabase("test")
+        _        <- db.createCollection("payments")
+        coll     <- db.getCollectionWithCodec[Payment]("payments")
+        _        <- coll.insertMany(List(p1, p2))
+        payments <- coll.find.filter(Filter.gt("date", ts)).all
+      } yield payments
+
+      result.map(_ mustBe List(p1, p2))
+    }
+  }
+
+
+
+
+
+
 }
