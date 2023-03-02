@@ -7,7 +7,11 @@ import cats.{Applicative, Monad}
 import cats.effect._
 import cats.effect.std.Console
 import cats.implicits.{catsSyntaxApplicativeError, catsSyntaxApply, catsSyntaxOptionId, none, toFlatMapOps, toFoldableOps, toFunctorOps, toTraverseOps}
+import derevo.cats.{eqv, show}
+import derevo.circe.magnolia.{decoder, encoder}
+import derevo.derive
 import fs2.Stream
+import io.estatico.newtype.macros.newtype
 import mongo4cats.circe.deriveCirceCodecProvider
 import mongo4cats.client.MongoClient
 import mongo4cats.collection.GenericMongoCollection
@@ -29,96 +33,27 @@ import java.time.OffsetDateTime
 import java.util.UUID
 
 
-
-class PostgresSuiteTry extends CatsEffectSuite {
-  import StartPostgres._
-
-
+object brand {
+  @derive(decoder, encoder, eqv, show) //, uuid
+  @newtype
   case class BrandIdT(value: UUID)
   object BrandIdT {
     implicit val isuuid: IsUUID[BrandIdT] = new IsUUID[BrandIdT] {
       val _UUID: Iso[UUID, BrandIdT] = Iso[UUID, BrandIdT](BrandIdT(_))(_.value)
     }
   }
+  @derive(decoder, encoder, eqv, show) //, uuid
+  @newtype
   case class BrandNameT(value: String)
 
+  @derive(decoder, encoder, eqv, show) //, uuid
   case class BrandT(uuid: BrandIdT, name: BrandNameT)
-//codecs
-  val brandIdT: Codec[BrandIdT]     = uuid.imap[BrandIdT](BrandIdT(_))(_.value)
-  val brandNameT: Codec[BrandNameT] = varchar.imap[BrandNameT](BrandNameT(_))(_.value)
-  val brandT: Codec[BrandT] =
-    (brandIdT ~ brandNameT).imap {
-      case i ~ n => BrandT(i, n)
-    }(b => b.uuid ~ b.name)
 
-  val selectAll: Query[Void, BrandT] =
-    sql"""
-        SELECT * FROM brands
-       """.query(brandT)
+}
 
-  val insertBrand: Command[BrandT] =
-    sql"""
-        INSERT INTO brands
-        VALUES ($brandT)
-        """.command
+object brandGen {
+  import brand._
 
-  trait BrandsT[F[_]] {
-    def findAll: F[List[BrandT]]
-    def create(name: BrandNameT): F[BrandIdT]
-  }
-
-  object BrandsT {
-    def make[F[_]: GenUUID: MonadCancelThrow](
-        session:  Session[F]
-      //  postgres: Resource[F, Session[F]]
-    ): BrandsT[F] =
-      new BrandsT[F] {
-
-        def findAll: F[List[BrandT]] =
-          session.execute(selectAll)
-        //  postgres.use(_.execute(selectAll))
-
-        def create(name: BrandNameT): F[BrandIdT] =
-       //   postgres.use { session =>
-            session.prepare(insertBrand).flatMap { cmd =>
-              ID.make[F, BrandIdT].flatMap { id =>
-                cmd.execute(BrandT(id, name)).as(id)
-              }
-            }
-      //    }
-      }
-
-    def makeMG[F[_]: GenUUID: MonadCancelThrow: Sync](
-        client: MongoClient[F]
-      //  postgres: Resource[F, Session[F]]
-    ): Brands[F] =
-      new Brands[F] {
-        lazy val collF: F[GenericMongoCollection[F, Brand, Stream[F, *]]] =
-        for {
-          db  <- client.getDatabase("store")
-          coll  <- db.getCollectionWithCodec[Brand]("brands")
-        } yield coll
-
-        def findAll: F[List[Brand]] = {
-          for {
-            coll  <- collF
-            //        persons = 1.to(5).map( i => Person("Bib"+i, "Bloggs" +i+"berg", Address("München", "GER"), Instant.now()))
-            //        _    <- coll.insertMany(persons)
-            docs <- coll.find.stream.compile.toList
-          } yield docs
-        }
-        //  postgres.use(_.execute(selectAll))
-
-        def create(name: BrandName): F[BrandId] =
-       //   postgres.use { session =>
-            session.prepare(insertBrand).flatMap { cmd =>
-              ID.make[F, BrandIdT].flatMap { id =>
-                cmd.execute(BrandT(id, name)).as(id)
-              }
-            }
-      //    }
-      }
-  }
 
   def idGen[A](f: UUID => A): Gen[A] =
     Gen.uuid.map(f)
@@ -153,50 +88,158 @@ class PostgresSuiteTry extends CatsEffectSuite {
         Gen.buildableOfN[List[BrandT], BrandT](n, brandTGen)
       }
 
+
+  val brandOne: BrandT                     = brandTGen.sample.get
+  val brandL: List[BrandT]              = brandTLGen.sample.get
+
+}
+
+
+
+object brandPG {//codecs unhd sql für Postgres -> entfällt bei MongoDB
+  import brand._
+
+  //codecs
+  val brandIdT: Codec[BrandIdT]     = uuid.imap[BrandIdT](BrandIdT(_))(_.value)
+  val brandNameT: Codec[BrandNameT] = varchar.imap[BrandNameT](BrandNameT(_))(_.value)
+  val brandT: Codec[BrandT] =
+    (brandIdT ~ brandNameT).imap {
+      case i ~ n => BrandT(i, n)
+    }(b => b.uuid ~ b.name)
+
+  val selectAll: Query[Void, BrandT] =
+    sql"""
+        SELECT * FROM brands
+       """.query(brandT)
+
+  val insertBrand: Command[BrandT] =
+    sql"""
+        INSERT INTO brands
+        VALUES ($brandT)
+        """.command
+
   val flushTables: Command[Void] = sql"DELETE FROM #brands".command
 
-  def findCreate2(res : Res, brand: BrandT): IO[Unit] =
-    res.flatTap(withTempTable).map(BrandsT.make(_)(GenUUID[IO], MonadCancelThrow[IO]))
-    .use { bs =>
-      for {
-        x <- bs.findAll
-        _ <- bs.create(brand.name)
-        y <- bs.findAll
-        z <- bs.create(brand.name).attempt
-      } yield println(
-        x.toString() + "\n" + (y.count(_.name == brand.name) == 1) + "\n" + (z
-          .fold(_.printStackTrace(), "Neu: " + _.toString))
-      )
-    }
+}
 
-  def brandTFromSession(s : Session[IO]) = BrandsT.make[IO](s)
-  val brand: BrandT = brandTGen.sample.get
-  val brandL: List[BrandT] = brandTLGen.sample.get
+
+object brandAlg {
+
+  import brand._
+  import brandPG._
+
+  trait BrandsT[F[_]] {
+    def findAll: F[List[BrandT]]
+    def create(name: BrandNameT): F[BrandIdT]
+  }
+
+  object BrandsT {
+    def make[F[_]: GenUUID: MonadCancelThrow](
+                                               session: Session[F]
+                                               //  postgres: Resource[F, Session[F]]
+                                             ): BrandsT[F] =
+      new BrandsT[F] {
+
+        def findAll: F[List[BrandT]] =
+          session.execute(selectAll)
+        //  postgres.use(_.execute(selectAll))
+
+        def create(name: BrandNameT): F[BrandIdT] =
+        //   postgres.use { session =>
+          session.prepare(insertBrand).flatMap { cmd =>
+            ID.make[F, BrandIdT].flatMap { id =>
+              cmd.execute(BrandT(id, name)).as(id)
+            }
+          }
+        //    }
+      }
+
+    def makeMG[F[_]: GenUUID: MonadCancelThrow: Sync](
+                                                       client: MongoClient[F]
+                                                     ): BrandsT[F] =
+      new BrandsT[F] {
+        lazy val collF: F[GenericMongoCollection[F, BrandT, Stream[F, *]]] =
+          for {
+            db   <- client.getDatabase("store")
+            coll <- db.getCollectionWithCodec[BrandT]("brands")
+          } yield coll
+
+        def findAll: F[List[BrandT]] = {
+          for {
+            coll <- collF
+            docs <- coll.find.stream.compile.toList
+          } yield docs
+        }
+
+        def create(name: BrandNameT): F[BrandIdT] =
+          for {
+            coll <- collF
+            id <- ID.make[F, BrandIdT]
+            brand =  BrandT(id, name)
+            doc   <- coll.insertOne(brand)
+          } yield  id //if(doc.getInsertedId != null)else BrandIdT(null)
+      }
+  }
+
+
+}
+
+class PostgresSuiteTry extends CatsEffectSuite {
+  import StartPostgres._
+  import brand._
+  import brandAlg._
+  import brandGen._
+
+
+  def findCreate2(res: Res, brand: BrandT): IO[Unit] = {
+    val brandsRes = res.flatTap(withTempTable).map(BrandsT.make(_))
+    findCreate2ByAlg(brandsRes, brand)
+  }
+  def findCreate2MG(res:  Resource[IO, MongoClient[IO]], brand: BrandT): IO[Unit] = {
+    val brandsRes = res.map(BrandsT.makeMG(_))
+    findCreate2ByAlg(brandsRes, brand)
+  }
+
+
+  def findCreate2ByAlg(res: Resource[IO, BrandsT[IO]], brand: BrandT): IO[Unit] =
+    res
+      .use { bs =>
+        for {
+          x <- bs.findAll
+          _ <- bs.create(brand.name)
+          y <- bs.findAll
+          z <- bs.create(brand.name).attempt
+        } yield println(
+          x.toString() + "\n" + (y.count(_.name == brand.name) == 1) + "\n" + (z
+            .fold(_.printStackTrace(), "Neu: " + _.toString))
+        )
+      }
+
+
+  def brandsTFromSession(s: Session[IO]) = BrandsT.make[IO](s)
 
   test("single brand") {
-    findCreate2(singleSession, brand)
+    findCreate2(singleSession, brandOne)
+  }
+  test("single brand MG") {
+    findCreate2MG(mongoClientRes, brandOne)
   }
 
   test("list brand") {
-    brandL.traverse(br =>  findCreate2(singleSession, br))
+    brandL.traverse(br => findCreate2(singleSession, br))
   }
 
   test("list brand") {
-   PropF.forAllF(brandTGen) { brand =>
-    //   forAll(brandTGen) { brand =>
+    PropF.forAllF(brandTGen) { brand =>
+      //   forAll(brandTGen) { brand =>
       findCreate2(singleSession, brand).as(())
     }
   }
 
   //res.unsafeRunSync()
-
-
-
   //gen zu stream + parMap mit pooledSessions
 
 }
-
-
 
 object StartPostgres extends App {
   type Res = Resource[IO, Session[IO]]
@@ -207,7 +250,8 @@ object StartPostgres extends App {
 //      .flatMap(configure)
 //      .flatTap(GlobalTracer.registerTracer[F])
 
-  Resource.make( IO(os.proc("""C:\se\prog\postgresql\12\pgAdmin 4\bin\pgAdmin4.exe""").call() ) )(c => IO(println(c.toString()) ))
+  Resource
+    .make(IO(os.proc("""C:\se\prog\postgresql\12\pgAdmin 4\bin\pgAdmin4.exe""").call()))(c => IO(println(c.toString())))
     .useForever
 //    .map { new JaegerEntryPoint[F](_, uriPrefix) }
 
@@ -217,7 +261,6 @@ object StartPostgres extends App {
     val free  = s.execute(sql"DROP TABLE teta".command).void
     Resource.make(alloc)(_ => free)
   }
-
 
   lazy val pooledSessions: Resource[IO, Resource[IO, Session[IO]]] =
     Session.pooled[IO](
@@ -238,10 +281,13 @@ object StartPostgres extends App {
       database = "store"
     )
 
-  lazy val mongodbIO = MongoClient.fromConnectionString[IO]("mongodb://localhost:27017").map(client =>   client.getDatabase("testdb"))
+  lazy val mongoClientRes:  Resource[IO, MongoClient[IO]] =
+    MongoClient.fromConnectionString[IO]("mongodb://localhost:27017")
+
+  lazy val mongodbIO =
+    mongoClientRes.map(client => client.getDatabase("testdb"))
 
 }
-
 
 object UserTry {
   case class UserT(id: UUID, name: String, pwd: String)
@@ -252,21 +298,20 @@ object UserTry {
     case u => u.id ~ u.name ~ u.pwd
   }
   val insertSql: Command[((UUID, String), String)] = sql"insert into users VALUES ($uuid, $varchar, $varchar)".command
-  val insertSqlC = sql"insert into users VALUES $codec".command
+  val insertSqlC                                   = sql"insert into users VALUES $codec".command
 
   def insert(dbres: Res, username: String, password: String) =
-    dbres.use(s => insertS(s,username, password))
+    dbres.use(s => insertS(s, username, password))
   def insertS(s: Session[IO], username: String, password: String) =
-  //  s.prepare(insertSqlC).flatMap(pc => pc.execute(UserT(UUID.randomUUID(), username, password)))
+    //  s.prepare(insertSqlC).flatMap(pc => pc.execute(UserT(UUID.randomUUID(), username, password)))
     s.prepare(insertSql).flatMap(pc => pc.execute((UUID.randomUUID() ~ username ~ password)))
 
   val findSql: Query[String, UserT] = sql"select * from users where name = $varchar".query(codec)
 
-  def findUser[A]( where : Fragment[A]): Query[A, UserT] = sql"select * from users $where".query(codec)
-  val frag : Fragment[String] =  sql"name = $varchar"
-  def findUserByNameQ: Query[String, UserT] = findUser(frag)
-  val findAllUserQ: Query[Void, UserT] = findUser(Fragment.empty)
-
+  def findUser[A](where: Fragment[A]): Query[A, UserT] = sql"select * from users $where".query(codec)
+  val frag: Fragment[String]                           = sql"name = $varchar"
+  def findUserByNameQ: Query[String, UserT]            = findUser(frag)
+  val findAllUserQ: Query[Void, UserT]                 = findUser(Fragment.empty)
 
   def findS(s: Session[IO], uname: String): IO[Option[UserT]] =
     s.prepare(findUserByNameQ).flatMap { q =>
@@ -276,16 +321,17 @@ object UserTry {
       }
     }
 
-  def findAllUserS(s : Session[IO]) =  s.prepare(findAllUserQ).flatMap { q =>
-    q.stream(Void,32).evalTap(u => IO(println(u))).compile.toList
+  def findAllUserS(s: Session[IO]) = s.prepare(findAllUserQ).flatMap { q =>
+    q.stream(Void, 32).evalTap(u => IO(println(u))).compile.toList
   }
 
-  def findAllUserS(s : Session[IO], uname: String) =  s.prepare(findUserByNameQ).flatMap { pq =>
+  def findAllUserS(s: Session[IO], uname: String) = s.prepare(findUserByNameQ).flatMap { pq =>
     pq.stream(uname, 32).evalTap(u => IO(println(u))).compile.toList
   }
 
-
-  def find(dbres: Res, uname: String) = dbres.use { s => findS(s, uname) }
+  def find(dbres: Res, uname: String) = dbres.use { s =>
+    findS(s, uname)
+  }
 
   def insertEtFind(dbres: Res, username: String, password: String) =
     for {
@@ -293,7 +339,7 @@ object UserTry {
       x <- find(dbres, username)
     } yield x.count(_.id == d)
 
- def insertEtFindS(s: Session[IO], username: String, password: String): IO[Int] =
+  def insertEtFindS(s: Session[IO], username: String, password: String): IO[Int] =
     for {
       d <- insertS(s, username, password)
       x <- findAllUserS(s, username)
@@ -301,18 +347,18 @@ object UserTry {
 
 }
 
-
 class TestTry extends CatsEffectSuite {
   import UserTry._
 
-
   test("findUser") {
-    StartPostgres.singleSession.use {  findAllUserS }
+    StartPostgres.singleSession.use { findAllUserS }
   }
 
   test("single Session") {
-    StartPostgres.singleSession.use( s =>
-      List(("Ha", "aH"), ("Sa", "aS"), ("Mo", "om"), ("Ad", "da")).traverse((vn) => UserTry.insertEtFindS(s, vn._1, vn._2).flatTap(n => IO.println(s"Gefnden mit id $n")) )
+    StartPostgres.singleSession.use(
+      s =>
+        List(("Ha", "aH"), ("Sa", "aS"), ("Mo", "om"), ("Ad", "da"))
+          .traverse((vn) => UserTry.insertEtFindS(s, vn._1, vn._2).flatTap(n => IO.println(s"Gefnden mit id $n")))
     )
     //    UserTry.test(singleSession, "Ha", "aH") .as(ExitCode.Success)
     //    UserTry.test(singleSession, "Sa", "aS") .as(ExitCode.Success)
@@ -321,7 +367,8 @@ class TestTry extends CatsEffectSuite {
   }
 
   test("single SessionRes") {
-      List(("Ha", "aH"), ("Sa", "aS"), ("Mo", "om"), ("Ad", "da")).traverse((vn) => UserTry.insertEtFind(StartPostgres.singleSession, vn._1, vn._2))
+    List(("Ha", "aH"), ("Sa", "aS"), ("Mo", "om"), ("Ad", "da"))
+      .traverse((vn) => UserTry.insertEtFind(StartPostgres.singleSession, vn._1, vn._2))
     //    UserTry.test(singleSession, "Ha", "aH") .as(ExitCode.Success)
     //    UserTry.test(singleSession, "Sa", "aS") .as(ExitCode.Success)
     //    UserTry.test(singleSession, "Mo", "om") .as(ExitCode.Success)
@@ -330,11 +377,10 @@ class TestTry extends CatsEffectSuite {
 
   test("SessionPool") {
     StartPostgres.pooledSessions.use { resS =>
-      List(("Ha", "aH"), ("Sa", "aS"), ("Mo", "om"), ("Ad", "da")).traverse((vn) => UserTry.insertEtFind(resS, vn._1, vn._2))
+      List(("Ha", "aH"), ("Sa", "aS"), ("Mo", "om"), ("Ad", "da"))
+        .traverse((vn) => UserTry.insertEtFind(resS, vn._1, vn._2))
     }
   }
-
-
   /*
   https://stackoverflow.com/questions/60438969/postgresql-npgsql-returning-42601-syntax-error-at-or-near-1
   using (Npgsql.NpgsqlConnection conn = new Npgsql.NpgsqlConnection(DBManager.GetConnectionString()))
@@ -349,14 +395,6 @@ class TestTry extends CatsEffectSuite {
                   addColumnQuery.ExecuteNonQuery();
               }
           }
-   */
-
+ */
 
 }
-
-
-
-
-
-
-
