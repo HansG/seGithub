@@ -117,7 +117,7 @@ object CaseClassesWithCirceCodecs extends CatsEffectSuite {
         payments <- coll.find.filter(Filter.gt("date", ts)).all
       } yield payments
 
-      result.map(_ mustBe List(p1, p2))
+      result.map(_.toList == List(p1, p2))
     }
   }
 

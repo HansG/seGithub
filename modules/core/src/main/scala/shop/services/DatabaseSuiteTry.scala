@@ -33,7 +33,7 @@ import java.time.OffsetDateTime
 import java.util.UUID
 
 
-object brand {
+object brandDomain {
   @derive(decoder, encoder, eqv, show) //, uuid
   @newtype
   case class BrandIdT(value: UUID)
@@ -42,6 +42,7 @@ object brand {
       val _UUID: Iso[UUID, BrandIdT] = Iso[UUID, BrandIdT](BrandIdT(_))(_.value)
     }
   }
+
   @derive(decoder, encoder, eqv, show) //, uuid
   @newtype
   case class BrandNameT(value: String)
@@ -51,14 +52,14 @@ object brand {
 
 }
 
-object brandGen {
-  import brand._
+object brandTestGen {
+  import brandDomain._
 
 
   def idGen[A](f: UUID => A): Gen[A] =
     Gen.uuid.map(f)
 
-  lazy val brandIdTGen: Gen[BrandIdT] =
+  lazy val brandIdGen: Gen[BrandIdT] =
     idGen(BrandIdT.apply)
 
   lazy val nonEmptyStringGen: Gen[String] =
@@ -72,32 +73,32 @@ object brandGen {
   def nesGen[A](f: String => A): Gen[A] =
     nonEmptyStringGen.map(f)
 
-  lazy val brandNameTGen: Gen[BrandNameT] =
+  lazy val brandNameGen: Gen[BrandNameT] =
     nesGen(BrandNameT.apply)
 
-  lazy val brandTGen: Gen[BrandT] =
+  lazy val brandGen: Gen[BrandT] =
     for {
-      i <- brandIdTGen
-      n <- brandNameTGen
+      i <- brandIdGen
+      n <- brandNameGen
     } yield BrandT(i, n)
 
-  val brandTLGen: Gen[List[BrandT]] =
+  val brandListGen: Gen[List[BrandT]] =
     Gen
       .chooseNum(1, 10)
       .flatMap { n =>
-        Gen.buildableOfN[List[BrandT], BrandT](n, brandTGen)
+        Gen.buildableOfN[List[BrandT], BrandT](n, brandGen)
       }
 
 
-  val brandOne: BrandT                     = brandTGen.sample.get
-  val brandL: List[BrandT]              = brandTLGen.sample.get
+  val brandSample: BrandT                     = brandGen.sample.get
+  val brandSampleList: List[BrandT]              = brandListGen.sample.get
 
 }
 
 
 
-object brandPG {//codecs unhd sql für Postgres -> entfällt bei MongoDB
-  import brand._
+object brandPG {//codecs und sql für Postgres -> entfällt bei MongoDB
+  import brandDomain._
 
   //codecs
   val brandIdT: Codec[BrandIdT]     = uuid.imap[BrandIdT](BrandIdT(_))(_.value)
@@ -125,7 +126,7 @@ object brandPG {//codecs unhd sql für Postgres -> entfällt bei MongoDB
 
 object brandAlg {
 
-  import brand._
+  import brandDomain._
   import brandPG._
 
   trait BrandsT[F[_]] {
@@ -134,7 +135,7 @@ object brandAlg {
   }
 
   object BrandsT {
-    def make[F[_]: GenUUID: MonadCancelThrow](
+    def makePg[F[_]: GenUUID: MonadCancelThrow](
                                                session: Session[F]
                                                //  postgres: Resource[F, Session[F]]
                                              ): BrandsT[F] =
@@ -184,15 +185,15 @@ object brandAlg {
 
 }
 
-class PostgresSuiteTry extends CatsEffectSuite {
+class DatabaseSuiteTry extends CatsEffectSuite {
   import StartPostgres._
-  import brand._
+  import brandDomain._
   import brandAlg._
-  import brandGen._
+  import brandTestGen._
 
 
-  def findCreate2(res: Res, brand: BrandT): IO[Unit] = {
-    val brandsRes = res.flatTap(withTempTable).map(BrandsT.make(_))
+  def findCreate2PG(res: Res, brand: BrandT): IO[Unit] = {
+    val brandsRes = res.flatTap(withTempTable).map(BrandsT.makePg(_))
     findCreate2ByAlg(brandsRes, brand)
   }
   def findCreate2MG(res:  Resource[IO, MongoClient[IO]], brand: BrandT): IO[Unit] = {
@@ -200,10 +201,8 @@ class PostgresSuiteTry extends CatsEffectSuite {
     findCreate2ByAlg(brandsRes, brand)
   }
 
-
   def findCreate2ByAlg(res: Resource[IO, BrandsT[IO]], brand: BrandT): IO[Unit] =
-    res
-      .use { bs =>
+    res.use { bs =>
         for {
           x <- bs.findAll
           _ <- bs.create(brand.name)
@@ -216,23 +215,26 @@ class PostgresSuiteTry extends CatsEffectSuite {
       }
 
 
-  def brandsTFromSession(s: Session[IO]) = BrandsT.make[IO](s)
-
   test("single brand") {
-    findCreate2(singleSession, brandOne)
+    findCreate2PG(singleSession, brandSample)
   }
+
   test("single brand MG") {
-    findCreate2MG(mongoClientRes, brandOne)
+    val brand = BrandT(BrandIdT(UUID.randomUUID()), BrandNameT("Daserw"))
+    findCreate2MG(mongoClientRes, brandSample)
+  }
+
+
+
+  test("list brand") {
+
+    brandSampleList.traverse(br => findCreate2PG(singleSession, br))
   }
 
   test("list brand") {
-    brandL.traverse(br => findCreate2(singleSession, br))
-  }
-
-  test("list brand") {
-    PropF.forAllF(brandTGen) { brand =>
+    PropF.forAllF(brandGen) { brand =>
       //   forAll(brandTGen) { brand =>
-      findCreate2(singleSession, brand).as(())
+      findCreate2PG(singleSession, brand).as(())
     }
   }
 
