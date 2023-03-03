@@ -62,6 +62,12 @@ object brandTestGen {
   lazy val brandIdGen: Gen[BrandIdT] =
     idGen(BrandIdT.apply)
 
+  lazy val brandIdGen1: Gen[BrandIdT] = {
+    for {
+      id <- Gen.uuid
+    } yield BrandIdT(id)
+  }
+
   lazy val nonEmptyStringGen: Gen[String] =
     Gen
       .chooseNum(7, 15)
@@ -70,11 +76,22 @@ object brandTestGen {
       }
       .map(_.toLowerCase.capitalize)
 
+  lazy val nonEmptyStringGen1: Gen[String] =
+    for {
+      n <- Gen.chooseNum(1, 10)
+      str <- Gen.buildableOfN[String, Char](n, Gen.alphaChar)
+    } yield str.toLowerCase.capitalize
+
   def nesGen[A](f: String => A): Gen[A] =
     nonEmptyStringGen.map(f)
 
   lazy val brandNameGen: Gen[BrandNameT] =
     nesGen(BrandNameT.apply)
+
+  lazy val brandNameGen1: Gen[BrandNameT] =
+    for {
+      str <- nonEmptyStringGen1
+    } yield  BrandNameT(str)
 
   lazy val brandGen: Gen[BrandT] =
     for {
@@ -88,6 +105,13 @@ object brandTestGen {
       .flatMap { n =>
         Gen.buildableOfN[List[BrandT], BrandT](n, brandGen)
       }
+
+  val brandListGen1: Gen[List[BrandT]] = {
+    for {
+      n <- Gen.chooseNum(1, 10)
+      list <-   Gen.buildableOfN[List[BrandT], BrandT](n, brandGen)
+    } yield list
+  }
 
 
   val brandSample: BrandT                     = brandGen.sample.get
