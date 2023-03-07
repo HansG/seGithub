@@ -23,7 +23,6 @@ import cats.implicits.toContravariantOps
 import derevo.cats.{eqv, show}
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
-import dev.profunktor.auth.jwt.JwtToken
 import io.circe.{Decoder, Encoder, Json, JsonObject}
 import io.circe.generic.auto._
 import mongo4cats.bson.ObjectId
@@ -32,15 +31,17 @@ import mongo4cats.circe._
 import mongo4cats.operations.Filter
 import munit.CatsEffectSuite
 import org.bson.codecs.configuration.{CodecRegistries, CodecRegistry}
-import shop.domain.brand.BrandParam
 import shop.domain.cart.Cart
-import skunk.syntax.id
 
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import scala.util.{Success, Try}
 
-object CaseClassesWithCirceCodecs extends CatsEffectSuite {
+
+/*
+MongoSocketOpenException: Exception opening socket  connection refused etc. -> Mongodb Dienst läuft nicht!!!! -> starten!!!
+ */
+class CaseClassesWithCirceCodecs extends CatsEffectSuite {
 
   def mongoClientRes:  Resource[IO, MongoClient[IO]] = {
     MongoClient.fromConnectionString[IO]("mongodb://localhost:27017")
@@ -49,10 +50,10 @@ object CaseClassesWithCirceCodecs extends CatsEffectSuite {
 
 
 
-  @derive(decoder, encoder,  show)
-  final case class Address(city: String, country: String)
-  @derive(decoder, encoder, show)
-  final case class Person(firstName: String, lastName: String, address: Address, registrationDate: Instant)
+ // @derive(decoder, encoder,  show)
+  case class Address(city: String, country: String)
+  //@derive(decoder, encoder, show)
+  case class Person(firstName: String, lastName: String, address: Address, registrationDate: Instant)
 
 //  object Instant {
 // }
@@ -66,13 +67,14 @@ object CaseClassesWithCirceCodecs extends CatsEffectSuite {
 
   val defaultInstant = Try(Instant.parse(("1900-01-01T00:00:00.000+00:00")))
 
+  /*
   implicit val instantEncoder: Encoder[Instant] =
     Encoder.forProduct1("registrationDate")(i =>  i.toString)
   implicit val instantDecoder: Decoder[Instant] =
     Decoder.forProduct1("registrationDate") ((dateS:String) => Instant.parse(dateS.toString))
  //   Decoder[String].emapTry(dateTag => Try(Instant.parse(dateTag)).fold(_ => defaultInstant, i =>  Try(i) ))
   implicit val instantShow: Show[Instant] =Show[String].contramap[Instant](_.toString)
-
+*/
 
   test("Person Codec") {
     //MongoClient.fromConnectionString[IO]("mongodb://localhost:27017").use { client =>
@@ -92,10 +94,10 @@ object CaseClassesWithCirceCodecs extends CatsEffectSuite {
 
 
   sealed trait PaymentMethod
-  final case class CreditCard(name: String, number: String, expiry: String, cvv: Int) extends PaymentMethod
-  final case class Paypal(email: String)                                              extends PaymentMethod
+  case class CreditCard(name: String, number: String, expiry: String, cvv: Int) extends PaymentMethod
+  case class Paypal(email: String)                                              extends PaymentMethod
 
-  final case class Payment(
+  case class Payment(
                             id: ObjectId,
                             amount: BigDecimal,
                             method: PaymentMethod,
