@@ -6,11 +6,11 @@ import shop.domain.brand.{Brand, BrandId, BrandName}
 import cats.{Applicative, Monad}
 import cats.effect._
 import cats.effect.std.Console
+import fs2.Stream
 import cats.implicits.{catsSyntaxApplicativeError, catsSyntaxApply, catsSyntaxOptionId, none, toFlatMapOps, toFoldableOps, toFunctorOps, toTraverseOps}
 import derevo.cats.{eqv, show}
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
-import fs2.Stream
 import io.estatico.newtype.macros.newtype
 import mongo4cats.circe.deriveCirceCodecProvider
 import mongo4cats.client.MongoClient
@@ -209,7 +209,7 @@ object brandAlg {
 
 }
 
-class DatabaseSuiteTry extends CatsEffectSuite {
+class DatabaseSuiteTry extends CatsEffectSuite with ScalaCheckEffectSuite {
   import StartPostgres._
   import brandDomain._
   import brandAlg._
@@ -251,7 +251,6 @@ class DatabaseSuiteTry extends CatsEffectSuite {
 
 
   test("list brand") {
-
     brandSampleList.traverse(br => findCreate2PG(singleSession, br))
   }
 
@@ -265,7 +264,65 @@ class DatabaseSuiteTry extends CatsEffectSuite {
   //res.unsafeRunSync()
   //gen zu stream + parMap mit pooledSessions
 
+
+
+    import UserTry._
+
+    test("findUser") {
+      StartPostgres.singleSession.use {
+        findAllUserS
+      }
+    }
+
+    test("single Session") {
+      StartPostgres.singleSession.use(
+        s =>
+          List(("Ha", "aH"), ("Sa", "aS"), ("Mo", "om"), ("Ad", "da"))
+            .traverse((vn) => UserTry.insertEtFindS(s, vn._1, vn._2).flatTap(n => IO.println(s"Gefnden mit id $n")))
+      )
+      //    UserTry.test(singleSession, "Ha", "aH") .as(ExitCode.Success)
+      //    UserTry.test(singleSession, "Sa", "aS") .as(ExitCode.Success)
+      //    UserTry.test(singleSession, "Mo", "om") .as(ExitCode.Success)
+      //    UserTry.test(singleSession, "Ad", "da") .as(ExitCode.Success)
+    }
+
+    test("single SessionRes") {
+      List(("Ha", "aH"), ("Sa", "aS"), ("Mo", "om"), ("Ad", "da"))
+        .traverse((vn) => UserTry.insertEtFind(StartPostgres.singleSession, vn._1, vn._2))
+      //    UserTry.test(singleSession, "Ha", "aH") .as(ExitCode.Success)
+      //    UserTry.test(singleSession, "Sa", "aS") .as(ExitCode.Success)
+      //    UserTry.test(singleSession, "Mo", "om") .as(ExitCode.Success)
+      //    UserTry.test(singleSession, "Ad", "da") .as(ExitCode.Success)
+    }
+
+    test("SessionPool") {
+      StartPostgres.pooledSessions.use { resS =>
+        List(("Ha", "aH"), ("Sa", "aS"), ("Mo", "om"), ("Ad", "da"))
+          .traverse((vn) => UserTry.insertEtFind(resS, vn._1, vn._2))
+      }
+    }
+    /*
+    https://stackoverflow.com/questions/60438969/postgresql-npgsql-returning-42601-syntax-error-at-or-near-1
+    using (Npgsql.NpgsqlConnection conn = new Npgsql.NpgsqlConnection(DBManager.GetConnectionString()))
+            {
+                conn.Open();
+                Logger.Info("connection opened for adding column");
+                using (Npgsql.NpgsqlCommand addColumnQuery = new Npgsql.NpgsqlCommand(@"ALTER TABLE @tableName ADD COLUMN IF NOT EXISTS @columnName  @columnType;", conn))
+                {
+                    addColumnQuery.Parameters.AddWithValue("@tableName", tableName);
+                    addColumnQuery.Parameters.AddWithValue("@columnName", columnName);
+                    addColumnQuery.Parameters.AddWithValue("@columnType", columnType);
+                    addColumnQuery.ExecuteNonQuery();
+                }
+            }
+   */
+
+
+
 }
+
+
+
 
 object StartPostgres extends App {
   type Res = Resource[IO, Session[IO]]
@@ -373,54 +430,3 @@ object UserTry {
 
 }
 
-class TestTry extends CatsEffectSuite {
-  import UserTry._
-
-  test("findUser") {
-    StartPostgres.singleSession.use { findAllUserS }
-  }
-
-  test("single Session") {
-    StartPostgres.singleSession.use(
-      s =>
-        List(("Ha", "aH"), ("Sa", "aS"), ("Mo", "om"), ("Ad", "da"))
-          .traverse((vn) => UserTry.insertEtFindS(s, vn._1, vn._2).flatTap(n => IO.println(s"Gefnden mit id $n")))
-    )
-    //    UserTry.test(singleSession, "Ha", "aH") .as(ExitCode.Success)
-    //    UserTry.test(singleSession, "Sa", "aS") .as(ExitCode.Success)
-    //    UserTry.test(singleSession, "Mo", "om") .as(ExitCode.Success)
-    //    UserTry.test(singleSession, "Ad", "da") .as(ExitCode.Success)
-  }
-
-  test("single SessionRes") {
-    List(("Ha", "aH"), ("Sa", "aS"), ("Mo", "om"), ("Ad", "da"))
-      .traverse((vn) => UserTry.insertEtFind(StartPostgres.singleSession, vn._1, vn._2))
-    //    UserTry.test(singleSession, "Ha", "aH") .as(ExitCode.Success)
-    //    UserTry.test(singleSession, "Sa", "aS") .as(ExitCode.Success)
-    //    UserTry.test(singleSession, "Mo", "om") .as(ExitCode.Success)
-    //    UserTry.test(singleSession, "Ad", "da") .as(ExitCode.Success)
-  }
-
-  test("SessionPool") {
-    StartPostgres.pooledSessions.use { resS =>
-      List(("Ha", "aH"), ("Sa", "aS"), ("Mo", "om"), ("Ad", "da"))
-        .traverse((vn) => UserTry.insertEtFind(resS, vn._1, vn._2))
-    }
-  }
-  /*
-  https://stackoverflow.com/questions/60438969/postgresql-npgsql-returning-42601-syntax-error-at-or-near-1
-  using (Npgsql.NpgsqlConnection conn = new Npgsql.NpgsqlConnection(DBManager.GetConnectionString()))
-          {
-              conn.Open();
-              Logger.Info("connection opened for adding column");
-              using (Npgsql.NpgsqlCommand addColumnQuery = new Npgsql.NpgsqlCommand(@"ALTER TABLE @tableName ADD COLUMN IF NOT EXISTS @columnName  @columnType;", conn))
-              {
-                  addColumnQuery.Parameters.AddWithValue("@tableName", tableName);
-                  addColumnQuery.Parameters.AddWithValue("@columnName", columnName);
-                  addColumnQuery.Parameters.AddWithValue("@columnType", columnType);
-                  addColumnQuery.ExecuteNonQuery();
-              }
-          }
- */
-
-}

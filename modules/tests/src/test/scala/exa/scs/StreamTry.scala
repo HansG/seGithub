@@ -20,8 +20,10 @@ import java.util.UUID
 
 /*TestDoku
 Für IOTests:
-Besser IOApp als Worksheet: nur ausgewähltes läuft, kein Rebuild Projekt nötig, damit imports in Worksheet funktionieren
-Besser CatsEffectSuite als IOApp: nur ausgewählten "test" laufen lassen (auch generell ohne IO) - Achtung: class(!!!!) .... extends CatsEffectSuite
+Worksheet
+Noch Besser IOApp als Worksheet: nur ausgewähltes läuft, kein Rebuild Projekt nötig, damit imports in Worksheet funktionieren
+Noch Besser CatsEffectSuite als IOApp: nur ausgewählten "test" laufen lassen (auch generell ohne IO)
+    - Achtung: als MUnit single test über gutter: notwendig   "class .... extends CatsEffectSuite" UND toplevel einziges Element im File!!
  */
 //object StreamTry extends IOApp {
 class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
@@ -75,6 +77,10 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
     .parEvalMapUnordered(10)(writeToSocket[IO])
 
   test("run  Stream parEvalMapUnordered  chunkN ") {
+    runStream(stpwrite)
+  }
+
+  test("2run  Stream parEvalMapUnordered  chunkN ") {
     runStream(stpwrite)
   }
 
