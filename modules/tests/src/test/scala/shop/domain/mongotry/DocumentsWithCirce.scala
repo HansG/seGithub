@@ -16,14 +16,18 @@
 
 package shop.domain.mongotry
 
+import de.flapdoodle.os.common.matcher.Matchers
 import io.circe.generic.auto._
 import mongo4cats.bson.{Document, ObjectId}
 import mongo4cats.circe._
 import mongo4cats.bson.syntax._
+import mongo4cats.operations.Filter
+import munit.CatsEffectSuite
+import shop.services.StartPostgres.mongoClientRes
 
 import java.time.Instant
 
-object DocumentsWithCirce extends App {
+class DocumentsWithCirce extends CatsEffectSuite  {//with Matchers
 
   final case class MyClass(
       _id: ObjectId,
@@ -51,4 +55,20 @@ object DocumentsWithCirce extends App {
 
   println(doc.toJson)
   println(retrievedMyClasses)
+
+  def categories(n: Int): Vector[Document] = (0 until n).map(i => Document("_id" := ObjectId.gen, "name" := s"cat-$i")).toVector
+
+  test("stream with filter"){
+    mongoClientRes.use { client =>
+      val result = for {
+         db   <- client.getDatabase("testdb")
+        coll <- db.getCollection("coll")
+        _ <- coll.insertMany(categories(50000))
+        res <- coll.find.filter(Filter.regex("name", "cat-(1|3|5).*")).stream.compile.toList
+      } yield res
+
+      result.map(_ must have size 23333)
+    }
+  }
+
 }
