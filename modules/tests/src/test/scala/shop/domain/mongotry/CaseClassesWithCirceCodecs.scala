@@ -72,9 +72,11 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
     Encoder.forProduct1("registrationDate")(i =>  i.toString)
   implicit val instantDecoder: Decoder[Instant] =
     Decoder.forProduct1("registrationDate") ((dateS:String) => Instant.parse(dateS.toString))
- //   Decoder[String].emapTry(dateTag => Try(Instant.parse(dateTag)).fold(_ => defaultInstant, i =>  Try(i) ))
-  implicit val instantShow: Show[Instant] =Show[String].contramap[Instant](_.toString)
+  //   Decoder[String].emapTry(dateTag => Try(Instant.parse(dateTag)).fold(_ => defaultInstant, i =>  Try(i) ))
 */
+
+
+  implicit val instantShow: Show[Instant] =Show[String].contramap[Instant](_.toString)
 
   test("Person Codec") {
     //MongoClient.fromConnectionString[IO]("mongodb://localhost:27017").use { client =>
@@ -83,8 +85,8 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
         //  db   <- client.getDatabase("testdb")
         db   <- dbio
         coll <- db.getCollectionWithCodec[Person]("people")
-        //        persons = 1.to(5).map( i => Person("Bib"+i, "Bloggs" +i+"berg", Address("München", "GER"), Instant.now()))
-        //        _    <- coll.insertMany(persons)
+                persons = 1.to(5).map( i => Person("Bib"+i, "Bloggs" +i+"berg", Address("München", "GER"), Instant.now()))
+                _    <- coll.insertMany(persons)
         docs <- coll.find.stream.compile.toList
         _    <- IO.println(docs)
       } yield ()
@@ -112,14 +114,31 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
     //withEmbeddedMongoClient { client =>
     mongoClientRes.use { client =>
       val result = for {
-        db       <- client.getDatabase("test")
+        db       <- client.getDatabase("testdb")
         _        <- db.createCollection("payments")
         coll     <- db.getCollectionWithCodec[Payment]("payments")
         _        <- coll.insertMany(List(p1, p2))
         payments <- coll.find.filter(Filter.gt("date", ts)).all
+        _    <- IO.println(payments)
       } yield payments
 
       result.map(_.toList == List(p1, p2))
+    }
+  }
+
+
+  test("find Payment")  {
+    val ts = Instant.parse("2020-01-01T00:00:00Z")
+
+    mongoClientRes.use { client =>
+      val result = for {
+        db       <- client.getDatabase("testdb")
+        coll     <- db.getCollectionWithCodec[Payment]("payments")
+        payments <- coll.find.filter(Filter.lt("date", ts)).all
+        _    <- IO.println(payments)
+      } yield payments
+
+      result.map(_.toList == List())
     }
   }
 

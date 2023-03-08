@@ -17,11 +17,13 @@
 package shop.domain.mongotry
 
 import cats.effect.{IO, IOApp}
+import com.mongodb.client.model.TextSearchOptions
 import mongo4cats.client.MongoClient
 import mongo4cats.operations.{Filter, Update}
 import mongo4cats.bson.Document
+import munit.CatsEffectSuite
 
-object JsonDocumentFindAndUpdate extends IOApp.Simple {
+class JsonDocumentFindAndUpdate  extends CatsEffectSuite  {
 
   val json =
     """{
@@ -31,6 +33,7 @@ object JsonDocumentFindAndUpdate extends IOApp.Simple {
       |}""".stripMargin
 
   val filterQuery = Filter.eq("lastName", "Bloggs") || Filter.eq("firstName", "John")
+  val filterQuery1 = Filter.text("lastName", TextSearchOptions.) || Filter.eq("firstName", "John")
 
   val updateQuery = Update
     .set("dob", "2020-01-01")
@@ -38,7 +41,7 @@ object JsonDocumentFindAndUpdate extends IOApp.Simple {
     .currentDate("updatedAt")
     .unset("lastName")
 
-  val run: IO[Unit] =
+  test("insert & update doc") {
     MongoClient.fromConnectionString[IO]("mongodb://localhost:27017").use { client =>
       for {
         db      <- client.getDatabase("testdb")
@@ -46,7 +49,22 @@ object JsonDocumentFindAndUpdate extends IOApp.Simple {
         _       <- coll.insertOne(Document.parse(json))
         old     <- coll.findOneAndUpdate(filterQuery, updateQuery)
         updated <- coll.find.first
+     //   docs1 <- coll.find(Filter("""{name: {$regex : /string/i}}""")).stream.compile.toList
         _       <- IO.println(s"Retrieved documents:\nold: ${old.get.toJson}\nupdated: ${updated.get.toJson}")
       } yield ()
     }
+  }
+
+
+ test("find doc") {
+    MongoClient.fromConnectionString[IO]("mongodb://localhost:27017").use { client =>
+      for {
+        db      <- client.getDatabase("testdb")
+        coll    <- db.getCollection("jsoncoll")
+        updated <- coll.find.first
+        _       <- IO.println(s"Retrieved documents:\nupdated: ${updated.get.toJson}")
+        _       <- IO.println(s"updated: ${updated.get.get("name").get.asString}")//updatedAtasDocument.get.toJson
+      } yield ()
+    }
+  }
 }
