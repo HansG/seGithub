@@ -23,6 +23,7 @@ import mongo4cats.circe._
 import mongo4cats.bson.syntax._
 import mongo4cats.operations.Filter
 import munit.CatsEffectSuite
+import org.scalatest.matchers.must.Matchers.{convertToAnyMustWrapper, have}
 import shop.services.StartPostgres.mongoClientRes
 
 import java.time.Instant

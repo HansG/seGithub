@@ -33,7 +33,6 @@ class JsonDocumentFindAndUpdate  extends CatsEffectSuite  {
       |}""".stripMargin
 
   val filterQuery = Filter.eq("lastName", "Bloggs") || Filter.eq("firstName", "John")
-  val filterQuery1 = Filter.text("lastName", TextSearchOptions.) || Filter.eq("firstName", "John")
 
   val updateQuery = Update
     .set("dob", "2020-01-01")
