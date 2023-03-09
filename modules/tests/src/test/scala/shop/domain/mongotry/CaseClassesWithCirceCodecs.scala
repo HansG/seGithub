@@ -27,7 +27,7 @@ import io.circe.{Decoder, Encoder, Json, JsonObject}
 import io.circe.generic.auto._
 import mongo4cats.bson.ObjectId
 import mongo4cats.client.MongoClient
-import mongo4cats.circe._
+import  mongo4cats.circe._
 import mongo4cats.operations.Filter
 import munit.CatsEffectSuite
 import org.bson.codecs.configuration.{CodecRegistries, CodecRegistry}

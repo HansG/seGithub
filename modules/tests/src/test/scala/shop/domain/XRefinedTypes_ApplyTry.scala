@@ -32,7 +32,7 @@ import shapeless._
 
 
 //Überprüfung von Werten zur Compiletime - und Runtime
-object XRefinedTypes_Apply extends App {
+object XRefinedTypes_ApplyTry extends App {
 
   //https://tech.ovoenergy.com/safe-expressive-code-with-refinement-types/?msclkid=bde8b5c4a5e511ec9a9bdf04c8d62d95
   //Validierung zur Compiletime nur  mit (String-)Literal:
@@ -46,7 +46,7 @@ object XRefinedTypes_Apply extends App {
   type CongsT = String Refined (Contains['g'] And Size[4])
   val cg : CongT = refineMV[MaxSize[20]]("jkg zz")
 
-  val cg1 : CongT =  " hgz"
+  val cg1 : CongT =  " hgzqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
 
   type SizedIntT  = String Refined (MaxSize[4] And Forall[Digit])
   val si : SizedIntT = refineMV[MaxSize[4] And Forall[Digit]]("4444")

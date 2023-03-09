@@ -1,7 +1,7 @@
 import cats.Show
 import cats.data.{NonEmptyList, Validated}
-import shop.domain.XCheckValueDeEncode._
-import shop.domain.PrinterTest
+import shop.domain.XCheckValueDeEncodeTry._
+import shop.domain.PrinterTestTry
 //import shop.domain.checkout.Card
  import  pprint.PPrinter
 

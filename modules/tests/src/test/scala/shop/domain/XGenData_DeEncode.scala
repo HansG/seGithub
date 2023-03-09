@@ -6,7 +6,7 @@ import cats.{ Parallel, Show }
 import eu.timepit.refined.api.Refined
 import org.scalacheck.{ Arbitrary, Gen }
 import org.scalacheck.rng.Seed
-import shop.domain.XRefinedTypes_Apply._
+import shop.domain.XRefinedTypes_ApplyTry._
 import shop.domain.auth.UserId
 import shop.domain.checkout._
 import shop.domain.payment.Payment
@@ -30,7 +30,7 @@ import $ivy.`com.google.guava:guava:18.0`, com.google.common.collect._
 
  */
 
-object XCheckValueDeEncode {
+object XCheckValueDeEncodeTry {
 
   //  val cn1 = CardNameP(" nnn") Predicate failed
 
@@ -186,12 +186,12 @@ object XCheckValueDeEncode {
 }
 
 object TestApp extends IOApp {
-  import XCheckValueDeEncode._
+  import XCheckValueDeEncodeTry._
   def run(args: List[String]): IO[cats.effect.ExitCode] =
-    PrinterTest(neCardListGen).run
+    PrinterTestTry(neCardListGen).run
 }
 
-case class PrinterTest[T](gen: Gen[T]) extends SimpleIOSuite with Checkers {
+case class PrinterTestTry[T](gen: Gen[T]) extends SimpleIOSuite with Checkers {
   implicit def toShow: Show[T] = Show.fromToString
 
   test("Show ...") {

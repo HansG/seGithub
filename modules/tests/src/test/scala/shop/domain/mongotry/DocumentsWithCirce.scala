@@ -30,7 +30,7 @@ import java.time.Instant
 
 class DocumentsWithCirce extends CatsEffectSuite  {//with Matchers
 
-  final case class MyClass(
+  case class MyClass(
       _id: ObjectId,
       dateField: Instant,
       stringField: String,

@@ -18,8 +18,12 @@ package shop.domain.mongotry
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
+import derevo.cats.show
+import derevo.circe.magnolia.{decoder, encoder}
+import derevo.derive
 import io.circe.generic.auto._
 import io.circe.{Decoder, Encoder}
+import mongo4cats.circe._
 import mongo4cats.bson.ObjectId
 import mongo4cats.client.MongoClient
 import mongo4cats.operations.Filter
@@ -32,9 +36,13 @@ import java.time.temporal.ChronoUnit
 import java.time.{Instant, LocalDate}
 import scala.concurrent.Future
 
+
+/*
+ bei implicit-Fehler wegen "not found ...MongoCodecProvider[T]": -> import mongo4cats.circe._
+ */
 class MongoCollectionSpec extends AsyncWordSpec with Matchers with EmbeddedMongo {
 
-  override val mongoPort: Int = 12348
+  //override val mongoPort: Int = 12348
 
   "A MongoCollection" should {
 
@@ -51,7 +59,6 @@ class MongoCollectionSpec extends AsyncWordSpec with Matchers with EmbeddedMongo
       implicit val decode: Decoder[Gender] = Decoder[String].emap(Gender.from)
       implicit val encode: Encoder[Gender] = Encoder[String].contramap(_.value)
     }
-
 
     final case class Address(
         streetNumber: Int,
@@ -72,115 +79,116 @@ class MongoCollectionSpec extends AsyncWordSpec with Matchers with EmbeddedMongo
     )
 
     "use circe codecs for encoding and decoding data" in {
-      withEmbeddedMongoClient { client =>
+      withMongoClient({ client =>
         val p = person()
         val result = for {
-          db   <- client.getDatabase("test")
-          _    <- db.createCollection("people")
+          db <- client.getDatabase("testdb")
+      //    _ <- db.createCollection("people")
           coll <- db.getCollectionWithCodec[Person]("people")
-          _    <- coll.insertOne(p)
+          _ <- coll.insertOne(p)
           filter = Filter.lt("dob", LocalDate.now()) && Filter.lt("registrationDate", Instant.now())
           people <- coll.find(filter).all
+          _    <-   IO.println(people)
         } yield people
 
         result.map(_ mustBe List(p))
-      }
+      })
     }
 
     "use circe-codec-provider for encoding and decoding data" in {
-      withEmbeddedMongoClient { client =>
+      withMongoClient({ client =>
         val p = person()
         val result = for {
-          db     <- client.getDatabase("test")
-          _      <- db.createCollection("people")
-          coll   <- db.getCollectionWithCodec[Person]("people")
-          _      <- coll.insertOne(p)
+          db <- client.getDatabase("testdb")
+          _ <- db.createCollection("people")
+          coll <- db.getCollectionWithCodec[Person]("people")
+          _ <- coll.insertOne(p)
           people <- coll.find.all
         } yield people
 
         result.map(_ mustBe List(p))
-      }
+      })
     }
 
     "find distinct nested objects" in {
-      withEmbeddedMongoClient { client =>
+      withMongoClient({ client =>
         val result = for {
-          db        <- client.getDatabase("test")
-          _         <- db.createCollection("people")
-          coll      <- db.getCollectionWithCodec[Person]("people")
-          _         <- coll.insertMany(List(person("John", "Bloggs"), person("John", "Doe"), person("John", "Smith")))
+          db <- client.getDatabase("testdb")
+          _ <- db.createCollection("people")
+          coll <- db.getCollectionWithCodec[Person]("people")
+          _ <- coll.insertMany(List(person("John", "Bloggs"), person("John", "Doe"), person("John", "Smith")))
           addresses <- coll.withAddedCodec[Address].distinct[Address]("address").all
         } yield addresses
 
         result.map { res =>
           res mustBe List(Address(611, "5th Ave", "New York", "NY 10022"))
         }
-      }
+      })
     }
 
     "find by items in array" in {
-      withEmbeddedMongoClient { client =>
+      withMongoClient({ client =>
         val newPerson = person()
         val result = for {
-          db   <- client.getDatabase("test")
-          _    <- db.createCollection("people")
+          db <- client.getDatabase("testdb")
+          _ <- db.createCollection("people")
           coll <- db.getCollectionWithCodec[Person]("people")
-          _    <- coll.insertOne(newPerson)
-          res  <- coll.find(Filter.in("aliases", List("Bob"))).all
+          _ <- coll.insertOne(newPerson)
+          res <- coll.find(Filter.in("aliases", List("Bob"))).all
         } yield res
 
         result.map { res =>
           res mustBe List(newPerson)
         }
-      }
+      })
     }
 
     "find distinct nested objects via distinctWithCode" in {
-      withEmbeddedMongoClient { client =>
+      withMongoClient({ client =>
         val result = for {
-          db        <- client.getDatabase("test")
-          _         <- db.createCollection("people")
-          coll      <- db.getCollectionWithCodec[Person]("people")
-          _         <- coll.insertMany(List(person("John", "Bloggs"), person("John", "Doe"), person("John", "Smith")))
+          db <- client.getDatabase("testdb")
+          _ <- db.createCollection("people")
+          coll <- db.getCollectionWithCodec[Person]("people")
+          _ <- coll.insertMany(List(person("John", "Bloggs"), person("John", "Doe"), person("John", "Smith")))
           addresses <- coll.distinctWithCodec[Address]("address").all
         } yield addresses
 
         result.map { res =>
           res mustBe List(Address(611, "5th Ave", "New York", "NY 10022"))
         }
-      }
+      })
     }
 
     "find distinct nested enums" in {
-      withEmbeddedMongoClient { client =>
+      withMongoClient({ client =>
         val result = for {
-          db      <- client.getDatabase("test")
-          _       <- db.createCollection("people")
-          coll    <- db.getCollectionWithCodec[Person]("people")
-          _       <- coll.insertMany(List(person("Jane", "Doe", Gender.Female), person("John", "Smith")))
+          db <- client.getDatabase("testdb")
+          _ <- db.createCollection("people")
+          coll <- db.getCollectionWithCodec[Person]("people")
+          _ <- coll.insertMany(List(person("Jane", "Doe", Gender.Female), person("John", "Smith")))
           genders <- coll.distinctWithCodec[Gender]("gender").all
         } yield genders
 
         result.map { res =>
           res.toSet mustBe Set(Gender.Female, Gender.Male)
         }
-      }
+      }, false)
     }
 
     "search by nested classes" in {
-      withEmbeddedMongoClient { client =>
+      withMongoClient({ client =>
         val result = for {
-          db      <- client.getDatabase("test")
-          _       <- db.createCollection("people")
-          coll    <- db.getCollectionWithCodec[Person]("people")
-          _       <- coll.insertMany(List(person("John", "Doe"), person("Jane", "Doe", Gender.Female)))
+          db <- client.getDatabase("testdb")
+          _ <- db.createCollection("people")
+          coll <- db.getCollectionWithCodec[Person]("people")
+          _ <- coll.insertMany(List(person("John", "Doe"), person("Jane", "Doe", Gender.Female)))
           females <- coll.withAddedCodec[Gender].find.filter(Filter.eq("gender", Gender.Female)).all
         } yield females
 
         result.map { res =>
           res must have size 1
         }
-      }
+      }, false)
     }
 
     sealed trait PaymentMethod
@@ -199,17 +207,17 @@ class MongoCollectionSpec extends AsyncWordSpec with Matchers with EmbeddedMongo
       val p1 = Payment(ObjectId(), BigDecimal(10), Paypal("foo@bar.com"), ts.plus(1, ChronoUnit.DAYS))
       val p2 = Payment(ObjectId(), BigDecimal(25), CreditCard("John Bloggs", "1234", "1021", 123), ts.plus(2, ChronoUnit.DAYS))
 
-      withEmbeddedMongoClient { client =>
+      withMongoClient({ client =>
         val result = for {
-          db       <- client.getDatabase("test")
-          _        <- db.createCollection("payments")
-          coll     <- db.getCollectionWithCodec[Payment]("payments")
-          _        <- coll.insertMany(List(p1, p2))
+          db <- client.getDatabase("testdb")
+          _ <- db.createCollection("payments")
+          coll <- db.getCollectionWithCodec[Payment]("payments")
+          _ <- coll.insertMany(List(p1, p2))
           payments <- coll.find.filter(Filter.gt("date", ts)).all
         } yield payments
 
         result.map(_ mustBe List(p1, p2))
-      }
+      }, false)
     }
 
     def person(firstName: String = "John", lastName: String = "Bloggs", gender: Gender = Gender.Male): Person =
@@ -225,10 +233,11 @@ class MongoCollectionSpec extends AsyncWordSpec with Matchers with EmbeddedMongo
       )
   }
 
-  def withEmbeddedMongoClient[A](test: MongoClient[IO] => IO[A]): Future[A] =
-    withRunningEmbeddedMongo {
-      MongoClient
-        .fromConnectionString[IO](s"mongodb://localhost:$mongoPort")
-        .use(test)
-    }.unsafeToFuture()(IORuntime.global)
+  def withMongoClient[A](test: MongoClient[IO] => IO[A], embedded: Boolean = false): Future[A] = {
+    val clientUse = MongoClient
+      .fromConnectionString[IO](s"mongodb://localhost:$mongoPort")
+      .use(test)
+    val clientUse1 = if(embedded) withRunningEmbeddedMongo { clientUse } else clientUse
+    clientUse1.unsafeToFuture()(IORuntime.global)
+  }
 }
