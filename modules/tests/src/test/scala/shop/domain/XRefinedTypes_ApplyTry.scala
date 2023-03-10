@@ -74,7 +74,7 @@ object XRefinedTypes_ApplyTry extends App {
   // val ps1 = List[WordT]("Joh n", "adi")
   case class Sentence(wds: WordT*)
   Sentence("John", "adi")
-  // Sentence("J  ohn", "adi")   CF
+  // Sentence("J  ohn", "adi")   CompileFehler
 
 
   val d1: Char Refined Equal['3'] = '3'

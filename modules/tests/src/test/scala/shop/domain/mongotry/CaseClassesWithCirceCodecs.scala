@@ -19,16 +19,21 @@ package shop.domain.mongotry
 import cats.Show
 import cats.conversions.all.autoNarrowContravariant
 import cats.effect.{IO, Resource}
-import cats.implicits.toContravariantOps
+import cats.implicits.{catsSyntaxTuple2Semigroupal, catsSyntaxTuple4Semigroupal, toContravariantOps}
 import derevo.cats.{eqv, show}
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.api.{Refined, RefinedTypeOps, Validate}
-import eu.timepit.refined.collection.Size
+import eu.timepit.refined.collection.{Forall, Size}
 import eu.timepit.refined.refineV
 import eu.timepit.refined.auto._
+import eu.timepit.refined.boolean.Not
+import eu.timepit.refined.generic.Equal
+import eu.timepit.refined.numeric.Interval
+import eu.timepit.refined.predicates.all.MaxSize
 import io.circe.{Decoder, Encoder, Json, JsonObject}
 import io.circe.generic.auto._
+import io.circe.syntax.EncoderOps
 import mongo4cats.bson.ObjectId
 import mongo4cats.client.MongoClient
 import mongo4cats.circe._
@@ -36,6 +41,7 @@ import mongo4cats.operations.Filter
 import munit.CatsEffectSuite
 import org.bson.codecs.configuration.{CodecRegistries, CodecRegistry}
 import shop.domain.cart.Cart
+import skunk.syntax.id
 
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -75,39 +81,42 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
     )
 
 
-  type String4 = String Refined Size[4]
+  type String10 = String Refined MaxSize[10]
   //implicit val dec =  decoderOf[String, Size[4]]
   //implicit val enc =  encoderOf[String, Size[4]]
   //implicit val show =  showOf[String, String4]
-  object String4 extends RefinedTypeOps[String4, String]
+  object String10 extends RefinedTypeOps[String10, String]
+  
+  type Minus5To20 = Double Refined Interval.Closed[-5.0, 20.0]
+  object Minus5To20 extends RefinedTypeOps[Minus5To20, Double]
 
 
-  @derive(decoder, encoder)//, show
-  case class Person(firstName: String4, lastName: String, address: Address, registrationDate: Instant)
+ // @derive(decoder, encoder)//, show
+  case class Person(firstName: String10, lastName: String, balance :Minus5To20, address: Address = Address("München", "GER"), registrationDate: Instant = Instant.now())
+
+
+  case class PersonEntry(person : Either[String, Person])
+
+   object PersonEntry {
+    def apply(firstName: String, lastName: String, balance :Double ) : PersonEntry = {
+      val pers = (String10.from(firstName), Minus5To20.from( balance  )).mapN((fn, ba) => Person(fn, lastName, ba))
+      PersonEntry(pers)
+    }
+  }
+
 
   //Compilefehler:
   //val pe = Person("Ernst", "Ha", null, null)
 
 
-//  object Instant {
-// }
- // val dateTag = "$date"
-
-  implicit val jsonEncoder: Encoder[Cart] =
-    Encoder.forProduct1("items")(_.items)
-  implicit val jsonDecoder: Decoder[Cart] =
-    Decoder.forProduct1("items")(Cart.apply)
-
-
   val defaultInstant = Try(Instant.parse(("1900-01-01T00:00:00.000+00:00")))
 
-  /*
-  implicit val instantEncoder: Encoder[Instant] =
-    Encoder.forProduct1("registrationDate")(i =>  i.toString)
-  implicit val instantDecoder: Decoder[Instant] =
-    Decoder.forProduct1("registrationDate") ((dateS:String) => Instant.parse(dateS.toString))
+  implicit val instantEncoder: Encoder[PersonEntry] =
+    Encoder.forProduct1("person")(i =>  i.asJson)
+  implicit val instantDecoder: Decoder[PersonEntry] =
+    Decoder.forProduct1("person") ((personS:String) => Json.fromString(personS).as[PersonEntry] .fold(fa => PersonEntry(Left(fa.toString())), pa => pa) )
   //   Decoder[String].emapTry(dateTag => Try(Instant.parse(dateTag)).fold(_ => defaultInstant, i =>  Try(i) ))
-*/
+
 
 
   implicit val instantShow: Show[Instant] =Show[String].contramap[Instant](_.toString)
@@ -118,11 +127,31 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
       for {
         //  db   <- client.getDatabase("testdb")
         db   <- dbio
-        coll <- db.getCollectionWithCodec[Person]("people")
-                persons = 1.to(2).map( i => Person(String4.from("Pet"+i).getOrElse(String4.from("Rest")), "Bloggs" +i+"berg", Address("München", "GER"), Instant.now()))
-                _    <- coll.insertMany(persons)
-        docs <- coll.find.stream.compile.toList
-        _    <- IO.println(docs)
+        coll <- db.getCollectionWithCodec[PersonEntry]("persons")
+        personEs = 1.to(4).map(i =>
+                 // Person(String10("Pet"*i), "Bloggs" +i+"berg", Minus5To20(-10.0 + 10*i)))
+               //   _    <- coll.insertMany(persons)
+          PersonEntry("Pet"*i, "Bloggs" +i+"berg", -10.0 + 10*i))
+        _    <- coll.insertMany(personEs)
+        somePers <- coll.find.filter(Filter.gt("balance", 10.0)).all
+        _    <- IO.println(somePers)
+        allPers <- coll.find.stream.compile.toList
+        _    <- IO.println(allPers)
+      } yield ()
+    }
+  }
+
+  test("Person find") {
+    //MongoClient.fromConnectionString[IO]("mongodb://localhost:27017").use { client =>
+    mongoClientRes.map(client =>   client.getDatabase("testdb")).use { dbio =>
+      for {
+        //  db   <- client.getDatabase("testdb")
+        db   <- dbio
+        coll <- db.getCollectionWithCodec[PersonEntry]("persons")
+        somePers <- coll.find.filter(Filter.gt("person.Right.value.balance", 10.0)).all
+        _    <- IO.println(somePers)
+        allPers <- coll.find.stream.compile.toList
+        _    <- IO.println(allPers)
       } yield ()
     }
   }
