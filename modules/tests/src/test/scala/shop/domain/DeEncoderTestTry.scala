@@ -20,7 +20,9 @@ import checkout._
   import eu.timepit.refined.auto._
   def id[T](v: T): T = v
 
-  Payment(UserId(UUID.randomUUID()), USD(5.10), Card( CardName(id[CardNamePred]("34John")), CardNumber(id[CardNumberPred](123456789012345699L)), CardExpiration(id[CardExpirationPred]("4444")), CardCVV(id[CardCVVPred](333)) ) )
+
+  //Compilefehler:
+ // Payment(UserId(UUID.randomUUID()), USD(5.10), Card( CardName(id[CardNamePred]("34John")), CardNumber(id[CardNumberPred](123456789012345699L)), CardExpiration(id[CardExpirationPred]("4444")), CardCVV(id[CardCVVPred](333)) ) )
 
 
 }

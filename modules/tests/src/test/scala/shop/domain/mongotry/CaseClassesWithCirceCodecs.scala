@@ -18,16 +18,20 @@ package shop.domain.mongotry
 
 import cats.Show
 import cats.conversions.all.autoNarrowContravariant
-import cats.effect.{IO, IOApp, Resource}
+import cats.effect.{IO, Resource}
 import cats.implicits.toContravariantOps
 import derevo.cats.{eqv, show}
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
+import eu.timepit.refined.api.{Refined, RefinedTypeOps, Validate}
+import eu.timepit.refined.collection.Size
+import eu.timepit.refined.refineV
+import eu.timepit.refined.auto._
 import io.circe.{Decoder, Encoder, Json, JsonObject}
 import io.circe.generic.auto._
 import mongo4cats.bson.ObjectId
 import mongo4cats.client.MongoClient
-import  mongo4cats.circe._
+import mongo4cats.circe._
 import mongo4cats.operations.Filter
 import munit.CatsEffectSuite
 import org.bson.codecs.configuration.{CodecRegistries, CodecRegistry}
@@ -35,6 +39,7 @@ import shop.domain.cart.Cart
 
 import java.time.Instant
 import java.time.temporal.ChronoUnit
+import scala.language.postfixOps
 import scala.util.{Success, Try}
 
 
@@ -52,8 +57,37 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
 
  // @derive(decoder, encoder,  show)
   case class Address(city: String, country: String)
-  //@derive(decoder, encoder, show)
-  case class Person(firstName: String, lastName: String, address: Address, registrationDate: Instant)
+
+  implicit def decoderOf[T, P](implicit v: Validate[T, P], d: Decoder[T]): Decoder[T Refined P] =
+    d.emap(refineV[P].apply[T](_))
+
+  implicit def encoderOf[T, P](implicit d: Encoder[T]): Encoder[T Refined P] =
+    d.contramap(_.value)
+
+  implicit def showOf[T, P](implicit d: Show[T]): Show[T Refined P] =
+    Show.show((rtp: T Refined P) => d.show(rtp.value))
+
+  implicit def validateSizeN[N <: Int, R](implicit w: ValueOf[N]): Validate.Plain[R, Size[N]] =
+    Validate.fromPredicate[R, Size[N]](
+      _.toString.size == w.value,
+      _ => s"Must have ${w.value} digits",
+      Size[N](w.value)
+    )
+
+
+  type String4 = String Refined Size[4]
+  //implicit val dec =  decoderOf[String, Size[4]]
+  //implicit val enc =  encoderOf[String, Size[4]]
+  //implicit val show =  showOf[String, String4]
+  object String4 extends RefinedTypeOps[String4, String]
+
+
+  @derive(decoder, encoder)//, show
+  case class Person(firstName: String4, lastName: String, address: Address, registrationDate: Instant)
+
+  //Compilefehler:
+  //val pe = Person("Ernst", "Ha", null, null)
+
 
 //  object Instant {
 // }
@@ -85,7 +119,7 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
         //  db   <- client.getDatabase("testdb")
         db   <- dbio
         coll <- db.getCollectionWithCodec[Person]("people")
-                persons = 1.to(5).map( i => Person("Bib"+i, "Bloggs" +i+"berg", Address("München", "GER"), Instant.now()))
+                persons = 1.to(2).map( i => Person(String4.from("Pet"+i).getOrElse(String4.from("Rest")), "Bloggs" +i+"berg", Address("München", "GER"), Instant.now()))
                 _    <- coll.insertMany(persons)
         docs <- coll.find.stream.compile.toList
         _    <- IO.println(docs)

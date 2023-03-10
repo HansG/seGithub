@@ -46,7 +46,7 @@ object XRefinedTypes_ApplyTry extends App {
   type CongsT = String Refined (Contains['g'] And Size[4])
   val cg : CongT = refineMV[MaxSize[20]]("jkg zz")
 
-  val cg1 : CongT =  " hgzqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
+  val cg1 : CongT =  " hgzqqqqqqqqqqqqq"//Compilefehler wenn zu lang qqqqqqqqqqqqqqqqqqqqqqq
 
   type SizedIntT  = String Refined (MaxSize[4] And Forall[Digit])
   val si : SizedIntT = refineMV[MaxSize[4] And Forall[Digit]]("4444")
@@ -63,7 +63,7 @@ object XRefinedTypes_ApplyTry extends App {
   type Alter1T =  Int Refined Interval.ClosedOpen[7, 77]
 
   case class Person(name: NameT, alter: AlterT, url: String Refined Url)
-  val per1 = Person("Peter", 58, "http://example.com")
+  val per1 = Person("Peter", 58, "http://example.com")//Compilefehler z.B. bei Person("Peter", 78,
 
 
   type WordT = String Refined MatchesRegex["[a-zA-Z]*"]
