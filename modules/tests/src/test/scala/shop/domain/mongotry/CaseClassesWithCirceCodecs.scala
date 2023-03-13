@@ -111,8 +111,18 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
 
   val defaultInstant = Try(Instant.parse(("1900-01-01T00:00:00.000+00:00")))
 
-  implicit val instantEncoder: Encoder[PersonEntry] =
-    Encoder.forProduct1("person")(i =>  i.asJson)
+
+   val personEntryEncoder: Encoder[PersonEntry] =
+    new Encoder[PersonEntry] {
+      final def apply(xs: PersonEntry): Json = {
+        xs.person.fold(
+          fehler => Json.obj("fehler" -> fehler),
+          person => person.asJson
+        )
+      }
+    }
+
+ //   Encoder.forProduct1("person")(i =>  i.person.fold(t => JsonObject("fehler", t), p => p.asJson))
   implicit val instantDecoder: Decoder[PersonEntry] =
     Decoder.forProduct1("person") ((personS:String) => Json.fromString(personS).as[PersonEntry] .fold(fa => PersonEntry(Left(fa.toString())), pa => pa) )
   //   Decoder[String].emapTry(dateTag => Try(Instant.parse(dateTag)).fold(_ => defaultInstant, i =>  Try(i) ))
