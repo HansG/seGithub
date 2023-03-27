@@ -116,7 +116,7 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
     new Encoder[PersonEntry] {
       final def apply(xs: PersonEntry): Json = {
         xs.person.fold(
-          fehler => Json.obj("fehler" -> fehler),
+          fehler => Json.obj("fehler" -> Json.fromString(fehler) ),
           person => person.asJson
         )
       }
