@@ -31,9 +31,11 @@ import eu.timepit.refined.boolean.Not
 import eu.timepit.refined.generic.Equal
 import eu.timepit.refined.numeric.Interval
 import eu.timepit.refined.predicates.all.MaxSize
-import io.circe.{Decoder, Encoder, Json, JsonObject}
+import io.circe.{Decoder, Encoder, HCursor, Json, JsonObject}
 import io.circe.generic.auto._
 import io.circe.syntax.EncoderOps
+import io.circe.parser.decode
+import io.circe.syntax._
 import mongo4cats.bson.ObjectId
 import mongo4cats.client.MongoClient
 import mongo4cats.circe._
@@ -95,6 +97,36 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
   case class Person(firstName: String10, lastName: String, balance :Minus5To20, address: Address = Address("München", "GER"), registrationDate: Instant = Instant.now())
 
 
+    test("Person Codec") {
+      val p = Person("Hans", "Hola", 15.0)
+      println(p.asJson)
+    }
+
+  test("Person Codec2") {
+
+    val js =
+            """{
+               |  "firstName" : "Hans",
+               |  "lastName" : "Hola",
+               |  "balance" : 15.0,
+               |  "address" : {
+               |    "city" : "München",
+               |    "country" : "GER"
+               |  },
+               |  "registrationDate" : {
+               |    "$date" : "2023-03-27T16:21:26.409911500Z"
+               |  }
+               |}""".stripMargin
+    println(decode[Person](js))
+    val jsf =
+             """{
+                |  "text" : "DecodingFailure at .balance: Missing required field",
+                |}""".stripMargin
+
+  }
+
+  case class Meldung(text : String)
+
   case class PersonEntry(person : Either[String, Person])
 
    object PersonEntry {
@@ -103,6 +135,7 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
       PersonEntry(pers)
     }
   }
+
 
 
   //Compilefehler:
@@ -122,11 +155,20 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
       }
     }
 
- //   Encoder.forProduct1("person")(i =>  i.person.fold(t => JsonObject("fehler", t), p => p.asJson))
+ /*   Encoder.forProduct1("person")(i =>  i.person.fold(t => JsonObject("fehler", t), p => p.asJson))
   implicit val instantDecoder: Decoder[PersonEntry] =
-    Decoder.forProduct1("person") ((personS:String) => Json.fromString(personS).as[PersonEntry] .fold(fa => PersonEntry(Left(fa.toString())), pa => pa) )
+    Decoder. ((personS:String) => if(personS.contains("fehler")) PersonEntry(Left(personS)) else Json.fromString(personS).as[Person].fold(decFail => PersonEntry(Left(decFail.getMessage())), pers => pers) )
   //   Decoder[String].emapTry(dateTag => Try(Instant.parse(dateTag)).fold(_ => defaultInstant, i =>  Try(i) ))
-
+  implicit val decodeFoo: Decoder[PersonEntry] = new Decoder[PersonEntry] {
+    final def apply(c: HCursor): Decoder.Result[PersonEntry] =
+      for {
+        foo <- c.downField("foo").as[String]
+        bar <- c.downField("bar").as[Int]
+      } yield {
+        new PersonEntry(foo, bar)
+      }
+  }
+  */
 
 
   implicit val instantShow: Show[Instant] =Show[String].contramap[Instant](_.toString)

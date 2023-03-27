@@ -181,7 +181,7 @@ object XCheckValueDeEncodeTry {
     //  Left(DecodingFailure(Predicate failed: Must have 16 digits., List(DownField(number), DownField(card))))
   )
 
-//  payJs.foreach(js => println(decode[Payment](js)))
+   payJs.foreach(js => println(decode[Payment](js)))
 
 }
 
