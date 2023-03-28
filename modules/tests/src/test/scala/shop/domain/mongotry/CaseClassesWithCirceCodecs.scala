@@ -44,6 +44,7 @@ import munit.CatsEffectSuite
 import org.bson.codecs.configuration.{CodecRegistries, CodecRegistry}
 import shop.domain.cart.Cart
 import skunk.syntax.id
+import weaver.Log.info
 
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -92,89 +93,96 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
   type Minus5To20 = Double Refined Interval.Closed[-5.0, 20.0]
   object Minus5To20 extends RefinedTypeOps[Minus5To20, Double]
 
+  sealed trait  PersonEntry
 
- // @derive(decoder, encoder)//, show
-  case class Person(firstName: String10, lastName: String, balance :Minus5To20, address: Address = Address("München", "GER"), registrationDate: Instant = Instant.now())
+  // @derive(decoder, encoder)//, show
+  case class Person(firstName: String10, lastName: String , address: Address = Address("München", "GER"), registrationDate: Instant = Instant.now()) extends PersonEntry
+
+  case class PersonG( firstName: String10,   lastName: String, balance :Minus5To20,  address: Address = Address("München", "GER"),  registrationDate: Instant = Instant.now()) extends PersonEntry
 
   //Compilefehler:
   //val pe = Person("Ernst", "Ha", 30.0, null)
 
-  test("Person Codec") {
-      val p = Person("Hans", "Hola", 15.0)
+  test("Person asJson") {
+      val p = PersonG("Hans", "Hola", 15.0)
       println(p.asJson)
     }
 
-  test("Person Codec2") {
+  val personJs =
+    """{
+      |  "firstName" : "Hans",
+      |  "lastName" : "Hola",
+      |  "balance" : 15.0,
+      |  "address" : {
+      |    "city" : "München",
+      |    "country" : "GER"
+      |  },
+      |  "registrationDate" : {
+      |    "$date" : "2023-03-27T16:21:26.409911500Z"
+      |  }
+      |}""".stripMargin
 
-    val js =
-            """{
-               |  "firstName" : "Hans",
-               |  "lastName" : "Hola",
-               |  "balance" : 15.0,
-               |  "address" : {
-               |    "city" : "München",
-               |    "country" : "GER"
-               |  },
-               |  "registrationDate" : {
-               |    "$date" : "2023-03-27T16:21:26.409911500Z"
-               |  }
-               |}""".stripMargin
-    println(decode[Person](js))
-    val jsf =
-             """{
-                |  "info" : "DecodingFailure at .balance: Missing required field"
-                |}""".stripMargin
-    println(decode[Info](jsf))
+  val infoJs =
+    """{
+      |  "info" : "DecodingFailure at .balance: Missing required field"
+      |}""".stripMargin
 
+  test("Person decode") {
+    println(decode[Person](personJs))
+    println(decode[Info](infoJs))
   }
 
-  case class Info(info : String)
+  case class Info(info : String)  extends PersonEntry
 
-  test("Info Codec") {
+  test("Info asJson") {
     val p = Info( "Hola" )
     println(p.asJson)
   }
 
-  type  PersonEntry = Either[Info, Person]
 
    object PersonEntry {
+    def apply(firstName: String, lastName: String ) : PersonEntry = {
+       (String10.from(firstName)).map(fn => Person(fn, lastName)) .fold(i =>(Info(i)), p => p)
+    }
+  }
+   object PersonGEntry {
     def apply(firstName: String, lastName: String, balance :Double ) : PersonEntry = {
-       (String10.from(firstName), Minus5To20.from( balance  )).mapN((fn, ba) => Person(fn, lastName, ba)).left.map(Info(_))
+       (String10.from(firstName), Minus5To20.from( balance  )).mapN((fn, ba) => PersonG(fn, lastName, ba)) .fold(i =>(Info(i)), p => p)
     }
   }
 
-  test("PersonEntry Codec ") {
+  //  implicit : damit es in .asJson(..) verwendet wird
+  implicit val personEntryEncoder: Encoder[PersonEntry] =
+    new Encoder[PersonEntry] {
+      final def apply(xs: PersonEntry): Json = {
+        xs match {
+          case p@Person(_, _, _, _) => p.asJson
+          case i@Info(_) => i.asJson
+        }
+      }
+    }
 
+
+  test("PersonEntry asJson ") {
+    val p : PersonEntry  = Person("Hans", "Hola")
+    println(p.asJson)
+    val pg: PersonEntry  = PersonG("Hans", "Hola", 15.0)
+    println(pg.asJson)
+    val p1 : PersonEntry = Info("Except   ion")
+    println(p1.asJson)
   }
 
+
+  implicit def personEntryDecoder(implicit idec: Decoder[Info], pd: Decoder[Person]): Decoder[PersonEntry] =
+    idec.either(pd).map(_.fold(i =>i, p => p))
+
+  test("PersonEntry DeCode ") {
+    println(decode[PersonEntry](personJs))
+    println(decode[PersonEntry](infoJs))
+  }
 
   val defaultInstant: Try[Instant] = Try(Instant.parse("1900-01-01T00:00:00.000+00:00"))
 
-
-   val personEntryEncoder: Encoder[PersonEntry] =
-    new Encoder[PersonEntry] {
-      final def apply(xs: PersonEntry): Json = {
-        xs.fold(
-          info =>  info.asJson,
-          person => person.asJson
-        )
-      }
-    }
-
- /*   Encoder.forProduct1("person")(i =>  i.person.fold(t => JsonObject("fehler", t), p => p.asJson))
-  implicit val instantDecoder: Decoder[PersonEntry] =
-    Decoder. ((personS:String) => if(personS.contains("fehler")) PersonEntry(Left(personS)) else Json.fromString(personS).as[Person].fold(decFail => PersonEntry(Left(decFail.getMessage())), pers => pers) )
-  //   Decoder[String].emapTry(dateTag => Try(Instant.parse(dateTag)).fold(_ => defaultInstant, i =>  Try(i) ))
-  implicit val decodeFoo: Decoder[PersonEntry] = new Decoder[PersonEntry] {
-    final def apply(c: HCursor): Decoder.Result[PersonEntry] =
-      for {
-        foo <- c.downField("foo").as[String]
-        bar <- c.downField("bar").as[Int]
-      } yield {
-        new PersonEntry(foo, bar)
-      }
-  }
-  */
 
 
   implicit val instantShow: Show[Instant] =Show[String].contramap[Instant](_.toString)
@@ -185,11 +193,11 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
       for {
         //  db   <- client.getDatabase("testdb")
         db   <- dbio
-        coll <- db.getCollectionWithCodec[PersonEntry]("persons")
+        coll <- db.getCollectionWithCodec[PersonEntry]("people")
         personEs = 1.to(4).map(i =>
                  // Person(String10("Pet"*i), "Bloggs" +i+"berg", Minus5To20(-10.0 + 10*i)))
                //   _    <- coll.insertMany(persons)
-          PersonEntry("Pet"*i, "Bloggs" +i+"berg", -10.0 + 10*i))
+          PersonEntry("Pet"*i, "Bloggs" +i+"berg"))//, -10.0 + 10*i))
         _    <- coll.insertMany(personEs)
         somePers <- coll.find.filter(Filter.gt("balance", 10.0)).all
         _    <- IO.println(somePers)
@@ -205,9 +213,9 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
       for {
         //  db   <- client.getDatabase("testdb")
         db   <- dbio
-        coll <- db.getCollectionWithCodec[PersonEntry]("persons")
-        somePers <- coll.find.filter(Filter.gt("person.Right.value.balance", 10.0)).all
-        _    <- IO.println(somePers)
+        coll <- db.getCollectionWithCodec[PersonEntry]("people")
+//        somePers <- coll.find.filter(Filter.gt("person.Right.value.balance", 10.0)).all
+//        _    <- IO.println(somePers)
         allPers <- coll.find.stream.compile.toList
         _    <- IO.println(allPers)
       } yield ()

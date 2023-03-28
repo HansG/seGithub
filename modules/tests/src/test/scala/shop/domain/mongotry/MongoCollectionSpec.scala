@@ -83,8 +83,8 @@ class MongoCollectionSpec extends AsyncWordSpec with Matchers with EmbeddedMongo
         val p = person()
         val result = for {
           db <- client.getDatabase("testdb")
-      //    _ <- db.createCollection("people")
-          coll <- db.getCollectionWithCodec[Person]("people")
+      //    _ <- db.createCollection("peopleG")
+          coll <- db.getCollectionWithCodec[Person]("peopleG")
           _ <- coll.insertOne(p)
           filter = Filter.lt("dob", LocalDate.now()) && Filter.lt("registrationDate", Instant.now())
           people <- coll.find(filter).all
