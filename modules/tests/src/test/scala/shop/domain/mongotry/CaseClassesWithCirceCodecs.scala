@@ -96,8 +96,10 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
  // @derive(decoder, encoder)//, show
   case class Person(firstName: String10, lastName: String, balance :Minus5To20, address: Address = Address("München", "GER"), registrationDate: Instant = Instant.now())
 
+  //Compilefehler:
+  //val pe = Person("Ernst", "Ha", 30.0, null)
 
-    test("Person Codec") {
+  test("Person Codec") {
       val p = Person("Hans", "Hola", 15.0)
       println(p.asJson)
     }
@@ -120,36 +122,40 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
     println(decode[Person](js))
     val jsf =
              """{
-                |  "text" : "DecodingFailure at .balance: Missing required field",
+                |  "info" : "DecodingFailure at .balance: Missing required field"
                 |}""".stripMargin
+    println(decode[Info](jsf))
 
   }
 
-  case class Meldung(text : String)
+  case class Info(info : String)
 
-  case class PersonEntry(person : Either[String, Person])
+  test("Info Codec") {
+    val p = Info( "Hola" )
+    println(p.asJson)
+  }
+
+  type  PersonEntry = Either[Info, Person]
 
    object PersonEntry {
     def apply(firstName: String, lastName: String, balance :Double ) : PersonEntry = {
-      val pers = (String10.from(firstName), Minus5To20.from( balance  )).mapN((fn, ba) => Person(fn, lastName, ba))
-      PersonEntry(pers)
+       (String10.from(firstName), Minus5To20.from( balance  )).mapN((fn, ba) => Person(fn, lastName, ba)).left.map(Info(_))
     }
   }
 
+  test("PersonEntry Codec ") {
+
+  }
 
 
-  //Compilefehler:
-  //val pe = Person("Ernst", "Ha", null, null)
-
-
-  val defaultInstant = Try(Instant.parse(("1900-01-01T00:00:00.000+00:00")))
+  val defaultInstant: Try[Instant] = Try(Instant.parse("1900-01-01T00:00:00.000+00:00"))
 
 
    val personEntryEncoder: Encoder[PersonEntry] =
     new Encoder[PersonEntry] {
       final def apply(xs: PersonEntry): Json = {
-        xs.person.fold(
-          fehler => Json.obj("fehler" -> Json.fromString(fehler) ),
+        xs.fold(
+          info =>  info.asJson,
           person => person.asJson
         )
       }
