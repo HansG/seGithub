@@ -18,6 +18,7 @@ package shop.domain.mongotry
 
 import cats.Show
 import cats.conversions.all.autoNarrowContravariant
+import cats.data.Validated
 import cats.effect.{IO, Resource}
 import cats.implicits.{catsSyntaxTuple2Semigroupal, catsSyntaxTuple4Semigroupal, toContravariantOps}
 import derevo.cats.{eqv, show}
@@ -31,14 +32,15 @@ import eu.timepit.refined.boolean.Not
 import eu.timepit.refined.generic.Equal
 import eu.timepit.refined.numeric.Interval
 import eu.timepit.refined.predicates.all.MaxSize
-import io.circe.{Decoder, Encoder, HCursor, Json, JsonObject}
+import io.circe.{CursorOp, Decoder, DecodingFailure, Encoder, HCursor, Json, JsonObject}
 import io.circe.generic.auto._
 import io.circe.syntax.EncoderOps
 import io.circe.parser.decode
 import io.circe.syntax._
 import mongo4cats.bson.ObjectId
 import mongo4cats.client.MongoClient
-import mongo4cats.circe._
+import mongo4cats.circe.{instantEncoder => _, instantDecoder => _,   _}
+import mongo4cats.database.GenericMongoDatabase
 import mongo4cats.operations.Filter
 import munit.CatsEffectSuite
 import org.bson.codecs.configuration.{CodecRegistries, CodecRegistry}
@@ -50,6 +52,7 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 import scala.language.postfixOps
 import scala.util.{Success, Try}
+import fs2.Stream
 
 
 /*
@@ -59,6 +62,10 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
 
   def mongoClientRes:  Resource[IO, MongoClient[IO]] = {
     MongoClient.fromConnectionString[IO]("mongodb://localhost:27017")
+  }
+
+  def mongoDbRes(database : String):   Resource[IO, IO[GenericMongoDatabase[IO, Stream[IO, *]]]] = {
+    mongoClientRes.map(client =>   client.getDatabase(database))
   }
 
 
@@ -89,7 +96,7 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
   //implicit val enc =  encoderOf[String, Size[4]]
   //implicit val show =  showOf[String, String4]
   object String10 extends RefinedTypeOps[String10, String]
-  
+
   type Minus5To20 = Double Refined Interval.Closed[-5.0, 20.0]
   object Minus5To20 extends RefinedTypeOps[Minus5To20, Double]
 
@@ -100,6 +107,8 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
 
   case class PersonG( firstName: String10,   lastName: String, balance :Minus5To20,  address: Address = Address("München", "GER"),  registrationDate: Instant = Instant.now()) extends PersonEntry
 
+  case class Info(info : String)  extends PersonEntry
+
   //Compilefehler:
   //val pe = Person("Ernst", "Ha", 30.0, null)
 
@@ -109,6 +118,19 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
     }
 
   val personJs =
+  """{
+    |  "firstName": "Bib3",
+    |  "lastName": "Bloggs3berg",
+    |  "address": {
+    |    "city": "München",
+    |    "country": "GER"
+    |  },
+    |  "registrationDate": {
+    |    "$date": "2023-03-08T10:01:50.339Z"
+    |  }
+    |}""".stripMargin
+
+  val personGJs =
     """{
       |  "firstName" : "Hans",
       |  "lastName" : "Hola",
@@ -117,22 +139,25 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
       |    "city" : "München",
       |    "country" : "GER"
       |  },
-      |  "registrationDate" : {
-      |    "$date" : "2023-03-27T16:21:26.409911500Z"
-      |  }
+      |  "registrationDate" : "2023-03-27T16:21:26.409911500Z"
       |}""".stripMargin
+/*
+"registrationDate" : {
+  "$date" : "2023-03-27T16:21:26.409911500Z"
+}
 
+ */
   val infoJs =
     """{
       |  "info" : "DecodingFailure at .balance: Missing required field"
       |}""".stripMargin
 
   test("Person decode") {
-    println(decode[Person](personJs))
+    println(decode[Person](personGJs))
+    println(decode[PersonG](personGJs))
     println(decode[Info](infoJs))
   }
 
-  case class Info(info : String)  extends PersonEntry
 
   test("Info asJson") {
     val p = Info( "Hola" )
@@ -157,6 +182,7 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
       final def apply(xs: PersonEntry): Json = {
         xs match {
           case p@Person(_, _, _, _) => p.asJson
+          case p@PersonG(_, _, _, _, _) => p.asJson
           case i@Info(_) => i.asJson
         }
       }
@@ -166,38 +192,74 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
   test("PersonEntry asJson ") {
     val p : PersonEntry  = Person("Hans", "Hola")
     println(p.asJson)
-    val pg: PersonEntry  = PersonG("Hans", "Hola", 15.0)
+    val pg: PersonEntry  = PersonG("Hans", "Hola", 15.0)//als PersonEntry:{ "info": "unbekannter typ: PersonG(Hans,Hola,15.0,Address(München,GER),2023-03-29T08:29:16.068060400Z) }
     println(pg.asJson)
+    val pgg: PersonG  = PersonG("Hans", "Hola", 15.0)// als PersonG
+    println(pgg.asJson)
     val p1 : PersonEntry = Info("Except   ion")
     println(p1.asJson)
   }
 
 
-  implicit def personEntryDecoder(implicit idec: Decoder[Info], pd: Decoder[Person]): Decoder[PersonEntry] =
-    idec.either(pd).map(_.fold(i =>i, p => p))
+
+  implicit def personEntryDecoder(implicit idec: Decoder[Info], pd: Decoder[Person], pgd: Decoder[PersonG]): Decoder[PersonEntry] =
+    idec.either( pgd.either( pd ).map(_.merge)  ).map(_.merge)
+
+   val tryInstant: Try[Instant] = Try(Instant.parse("1900-01-01T00:00:00.000+00:00"))
+
+  //implicit def instantDecoder(implicit inst: Decoder[Instant]): Decoder[Instant] = {
+  //  Decoder.
+
+    def parseInstant(ops: => List[CursorOp])(d: String): Either[DecodingFailure, Instant] =
+      Validated.fromTry(Try(Instant.parse(d))).leftMap(DecodingFailure.fromThrowable(_, ops)).toEither
+
+    val myInstantDecoder: Decoder[Instant] = (c: HCursor) =>c.as[String].flatMap(parseInstant(c.history))
+
+    implicit val eInstantDecoder: Decoder[Instant] =
+      mongo4cats.circe.instantDecoder.either(myInstantDecoder).map(_.merge)
+
+  implicit val instantEncoder: Encoder[Instant] =
+    Encoder.encodeJson.contramap[Instant](i => Json.fromString(i.toString))
+
+  val instantShow: Show[Instant] =Show[String].contramap[Instant](_.toString)
+
 
   test("PersonEntry DeCode ") {
-    println(decode[PersonEntry](personJs))
-    println(decode[PersonEntry](infoJs))
+      println(decode[PersonEntry](personGJs))
+      println(decode[PersonG](personGJs))
+      println(decode[PersonEntry](infoJs))
+    }
+
+  test("Person find") {
+    mongoClientRes.use { client =>
+      def useS(persStream: Stream[IO, PersonEntry]) = persStream.evalTap((pe: PersonEntry) => IO.println(pe)).map {
+        case pg@PersonG(_, _, _, _, _) => s"eine PersonG ${pg.firstName}"
+        case p@Person(_, _, _, _) => s"eine Person ${p.firstName}"
+        case i@Info(_) => s"eine Info ${i.info}"
+      }.evalTap(IO.println(_)).compile.drain
+
+      for {
+        db <- client.getDatabase("testdb")
+        coll <- db.getCollectionWithCodec[PersonEntry]("people")
+        allPers <- useS(coll.find.stream)
+        // allPers <- coll.find.stream.compile.toList //
+        // _ <- IO.println(allPers)
+      } yield allPers
+
+     }
   }
 
-  val defaultInstant: Try[Instant] = Try(Instant.parse("1900-01-01T00:00:00.000+00:00"))
 
 
-
-  implicit val instantShow: Show[Instant] =Show[String].contramap[Instant](_.toString)
-
-  test("Person Codec") {
-    //MongoClient.fromConnectionString[IO]("mongodb://localhost:27017").use { client =>
-    mongoClientRes.map(client =>   client.getDatabase("testdb")).use { dbio =>
+  test("PersonG mongo") {
+    mongoClientRes.use { client =>
       for {
-        //  db   <- client.getDatabase("testdb")
-        db   <- dbio
+        db <- client.getDatabase("testdb")
         coll <- db.getCollectionWithCodec[PersonEntry]("people")
         personEs = 1.to(4).map(i =>
                  // Person(String10("Pet"*i), "Bloggs" +i+"berg", Minus5To20(-10.0 + 10*i)))
                //   _    <- coll.insertMany(persons)
-          PersonEntry("Pet"*i, "Bloggs" +i+"berg"))//, -10.0 + 10*i))
+          PersonGEntry("Pet"*i, "Bloggs" +i+"berg", -10.0 + 10*i))
         _    <- coll.insertMany(personEs)
         somePers <- coll.find.filter(Filter.gt("balance", 10.0)).all
         _    <- IO.println(somePers)
@@ -207,26 +269,19 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
     }
   }
 
-  test("Person find") {
-    //MongoClient.fromConnectionString[IO]("mongodb://localhost:27017").use { client =>
-    mongoClientRes.map(client =>   client.getDatabase("testdb")).use { dbio =>
-      for {
-        //  db   <- client.getDatabase("testdb")
-        db   <- dbio
-        coll <- db.getCollectionWithCodec[PersonEntry]("people")
-//        somePers <- coll.find.filter(Filter.gt("person.Right.value.balance", 10.0)).all
-//        _    <- IO.println(somePers)
-        allPers <- coll.find.stream.compile.toList
-        _    <- IO.println(allPers)
-      } yield ()
-    }
-  }
 
 
 
   sealed trait PaymentMethod
   case class CreditCard(name: String, number: String, expiry: String, cvv: Int) extends PaymentMethod
   case class Paypal(email: String)                                              extends PaymentMethod
+
+
+  test("PaymentMethod decode"){
+
+  }
+
+
 
   case class Payment(
                             id: ObjectId,
