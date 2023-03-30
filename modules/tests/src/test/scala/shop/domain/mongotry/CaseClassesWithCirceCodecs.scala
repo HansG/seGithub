@@ -69,8 +69,6 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
   }
 
 
-
-
  // @derive(decoder, encoder,  show)
   case class Address(city: String, country: String)
 
@@ -117,40 +115,7 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
       println(p.asJson)
     }
 
-  val personJs =
-  """{
-    |  "firstName": "Bib3",
-    |  "lastName": "Bloggs3berg",
-    |  "address": {
-    |    "city": "München",
-    |    "country": "GER"
-    |  },
-    |  "registrationDate": {
-    |    "$date": "2023-03-08T10:01:50.339Z"
-    |  }
-    |}""".stripMargin
-
-  val personGJs =
-    """{
-      |  "firstName" : "Hans",
-      |  "lastName" : "Hola",
-      |  "balance" : 15.0,
-      |  "address" : {
-      |    "city" : "München",
-      |    "country" : "GER"
-      |  },
-      |  "registrationDate" : "2023-03-27T16:21:26.409911500Z"
-      |}""".stripMargin
-/*
-"registrationDate" : {
-  "$date" : "2023-03-27T16:21:26.409911500Z"
-}
-
- */
-  val infoJs =
-    """{
-      |  "info" : "DecodingFailure at .balance: Missing required field"
-      |}""".stripMargin
+  import TestData._
 
   test("Person decode") {
     println(decode[Person](personGJs))
@@ -176,17 +141,6 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
     }
   }
 
-  //  implicit : damit es in .asJson(..) verwendet wird
-  implicit val personEntryEncoder: Encoder[PersonEntry] =
-    new Encoder[PersonEntry] {
-      final def apply(xs: PersonEntry): Json = {
-        xs match {
-          case p@Person(_, _, _, _) => p.asJson
-          case p@PersonG(_, _, _, _, _) => p.asJson
-          case i@Info(_) => i.asJson
-        }
-      }
-    }
 
 
   test("PersonEntry asJson ") {
@@ -198,26 +152,22 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
     println(pgg.asJson)
     val p1 : PersonEntry = Info("Except   ion")
     println(p1.asJson)
+
   }
 
 
 
-  implicit def personEntryDecoder(implicit idec: Decoder[Info], pd: Decoder[Person], pgd: Decoder[PersonG]): Decoder[PersonEntry] =
-    idec.either( pgd.either( pd ).map(_.merge)  ).map(_.merge)
 
-   val tryInstant: Try[Instant] = Try(Instant.parse("1900-01-01T00:00:00.000+00:00"))
-
-  //implicit def instantDecoder(implicit inst: Decoder[Instant]): Decoder[Instant] = {
-  //  Decoder.
-
-    def parseInstant(ops: => List[CursorOp])(d: String): Either[DecodingFailure, Instant] =
+  //eigener  myInstantDecoder
+  def parseInstant(ops: => List[CursorOp])(d: String): Either[DecodingFailure, Instant] =
       Validated.fromTry(Try(Instant.parse(d))).leftMap(DecodingFailure.fromThrowable(_, ops)).toEither
 
-    val myInstantDecoder: Decoder[Instant] = (c: HCursor) =>c.as[String].flatMap(parseInstant(c.history))
+  val myInstantDecoder: Decoder[Instant] = (c: HCursor) =>c.as[String].flatMap(parseInstant(c.history))
+  //standard instantDecoder either myInstantDecoder
+  implicit val eInstantDecoder: Decoder[Instant] =
+    mongo4cats.circe.instantDecoder.either(myInstantDecoder).map(_.merge)
 
-    implicit val eInstantDecoder: Decoder[Instant] =
-      mongo4cats.circe.instantDecoder.either(myInstantDecoder).map(_.merge)
-
+  //eigener instantEncoder (ohne extra JsonObject $time...)
   implicit val instantEncoder: Encoder[Instant] =
     Encoder.encodeJson.contramap[Instant](i => Json.fromString(i.toString))
 
@@ -255,12 +205,12 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
     mongoClientRes.use { client =>
       for {
         db <- client.getDatabase("testdb")
-        coll <- db.getCollectionWithCodec[PersonEntry]("people")
-        personEs = 1.to(4).map(i =>
-                 // Person(String10("Pet"*i), "Bloggs" +i+"berg", Minus5To20(-10.0 + 10*i)))
-               //   _    <- coll.insertMany(persons)
-          PersonGEntry("Pet"*i, "Bloggs" +i+"berg", -10.0 + 10*i))
-        _    <- coll.insertMany(personEs)
+        coll <- db.createCollection("peopleG")
+        coll <- db.getCollectionWithCodec[PersonEntry]("peopleG")
+          persons = 1.to(3).map(i => PersonEntry("Egon"*i, "Keil" +i+"berg"))
+          personGs = 1.to(3).map(i => PersonGEntry("Bibi"*i, "Bloggs" +i+"berg", -10.0 + 10*i))
+          infos = 1.to(3).map(i => Info("Schitt Fehler"))
+        _    <- coll.insertMany(persons ++ personGs ++ infos)
         somePers <- coll.find.filter(Filter.gt("balance", 10.0)).all
         _    <- IO.println(somePers)
         allPers <- coll.find.stream.compile.toList
@@ -328,7 +278,122 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
 
 
 
+  object TestData {
+
+    val personJs =
+      """{
+        |  "Person" : {
+        |    "firstName" : "Hans",
+        |    "lastName" : "Hola",
+        |    "address" : {
+        |      "city" : "München",
+        |      "country" : "GER"
+        |    },
+        |    "registrationDate" : "2023-03-30T13:59:13.567031800Z"
+        |  }
+        |}"""
+    val personGJs =
+      """{
+        |  "PersonG" : {
+        |    "firstName" : "Hans",
+        |    "lastName" : "Hola",
+        |    "balance" : 15.0,
+        |    "address" : {
+        |      "city" : "München",
+        |      "country" : "GER"
+        |    },
+        |    "registrationDate" : "2023-03-30T13:59:13.655351600Z"
+        |  }
+        |}
+        |""".stripMargin
+    val infoJs =
+      """{
+        |  "Info" : {
+        |    "info" : "Except   ion"
+        |  }
+        |}
+        |"""
+
+    object CustomDeEncoder {
+      /*Standard De/Encoder für "Oder-Typ": cl1, cl2,... extends trait: mit Zwischenknoten für Typ
+      {
+         "Person/PersonG/Info" : {
+            "attr" : "value",
+            ....
+         }
+      }
+
+      //Eigener De/Encoder für "Oder-Typ": cl1, cl2,... extends trait: unmittelbares Json
+      {
+          "attr" : "value",
+          ....
+      }
+      */
+
+      //eigene De/Encoder: wirkt nur auf Objekt selber, d.h. ="Blatt-Mapper"
+
+      //  implicit : damit es in .asJson(..) verwendet wird
+      implicit val personEntryEncoder: Encoder[PersonEntry] =
+        new Encoder[PersonEntry] {
+          final def apply(xs: PersonEntry): Json = {
+            xs match {
+              case p@Person(_, _, _, _) => p.asJson
+              case p@PersonG(_, _, _, _, _) => p.asJson
+              case i@Info(_) => i.asJson
+            }
+          }
+        }
+
+      //eigener PersonEntry-Decoder mit direktem  Json {JJJ} (ohne { typ : {JJJ} }
+      implicit def personEntryDecoder(implicit idec: Decoder[Info], pd: Decoder[Person], pgd: Decoder[PersonG]): Decoder[PersonEntry] =
+        idec.either(pgd.either(pd).map(_.merge)).map(_.merge)
+
+
+      val personJs =
+        """{
+          |  "firstName": "Bib3",
+          |  "lastName": "Bloggs3berg",
+          |  "address": {
+          |    "city": "München",
+          |    "country": "GER"
+          |  },
+          |  "registrationDate": {
+          |    "$date": "2023-03-08T10:01:50.339Z"
+          |  }
+          |}""".stripMargin
+
+      val personGJs =
+        """{
+          |  "firstName" : "Hans",
+          |  "lastName" : "Hola",
+          |  "balance" : 15.0,
+          |  "address" : {
+          |    "city" : "München",
+          |    "country" : "GER"
+          |  },
+          |  "registrationDate" : "2023-03-27T16:21:26.409911500Z"
+          |}""".stripMargin
+      /*
+      "registrationDate" : {
+        "$date" : "2023-03-27T16:21:26.409911500Z"
+      }
+
+       */
+      val infoJs =
+        """{
+          |  "info" : "DecodingFailure at .balance: Missing required field"
+          |}""".stripMargin
+
+
+    }
+
+
+
+  }
 
 
 
 }
+
+
+
