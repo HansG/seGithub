@@ -121,10 +121,10 @@ object HttAppTry extends IOApp.Simple {
 
   import shop.ext.http4s.refined._
 
-  case class ServiceAtHttpApp(service: Service[IO]) extends Http4sDsl[IO] {
-    lazy val httpRoutes: HttpRoutes[IO] = HttpRoutes.of[IO] {
+  object ServiceAtHttpRoutes extends Http4sDsl[IO] {
+    def apply(service: Service[IO]): HttpRoutes[IO] = HttpRoutes.of[IO] {
       case GET -> Root => Ok(service.findAll)
-      case req @ POST -> Root =>
+      case req@POST -> Root =>
         req.decodeR[ProdName] { pn =>
           service.create(pn).flatMap { id => //.toDomain
             Created(Prod(id, pn))
@@ -133,16 +133,6 @@ object HttAppTry extends IOApp.Simple {
         }
     }
 
-    def apply =  {
-      val satrr: HttpRoutes[IO] = Router(UriConfig.pathPrefix -> httpRoutes)
-      val app                   = Router(UriConfig.vers -> satrr).orNotFound
-
-      def addLoggers[F[_]: Async](http: HttpApp[F]): HttpApp[F] = {
-        val httpReq = RequestLogger.httpApp(true, true)(http)
-        ResponseLogger.httpApp(true, true)(httpReq)
-      }
-      addLoggers(app)
-    }
   }
 
   trait UriConfigI {
@@ -166,20 +156,7 @@ object HttAppTry extends IOApp.Simple {
   }
 
 
-  def httpAppAtServer[F[_]: Async](httpApp: HttpApp[F]) =
-    EmberServerBuilder
-      .default[F]
-      .withHost(UriConfig.host)
-      .withPort(UriConfig.port)
-      .withHttpApp(httpApp)
-      .build
-
-  def start = {
-    val server = httpAppAtServer[IO]( ServiceAtHttpApp(AMockService.genMockService).apply )
-    server.useForever
-  }
-
-  override def run: IO[Unit] = start
+  override def run: IO[Unit] = HttpServerStart(UriConfig.host, UriConfig.port, UriConfig.vers, UriConfig.pathPrefix).startRoutes(ServiceAtHttpRoutes(AMockService.genMockService))
   // override def run: IO[Unit] = runFst
 
   /*object AppX extends IOApp {
@@ -189,6 +166,41 @@ object HttAppTry extends IOApp.Simple {
   }*/
 
 }
+
+
+
+case class HttpServerStart(host: Host, port: Port, vers: String, pathPrefix: String) {
+
+  def httpRoutesAtHttpApp(httpRoutes: HttpRoutes[IO]) = {
+    val satrr: HttpRoutes[IO] = Router(pathPrefix -> httpRoutes)
+    val app = Router(vers -> satrr).orNotFound
+
+    def addLoggers[F[_] : Async](http: HttpApp[F]): HttpApp[F] = {
+      val httpReq = RequestLogger.httpApp(true, true)(http)
+      ResponseLogger.httpApp(true, true)(httpReq)
+    }
+
+    addLoggers(app)
+  }
+
+
+  def httpAppAtServer[F[_] : Async](httpApp: HttpApp[F]) =
+    EmberServerBuilder
+      .default[F]
+      .withHost(host)
+      .withPort(port)
+      .withHttpApp(httpApp)
+      .build
+
+  def startRoutes(httpRoutes: HttpRoutes[IO]) = {
+    val server = httpAppAtServer[IO](httpRoutesAtHttpApp(httpRoutes))
+    server.useForever
+  }
+
+
+}
+
+
 
 //Client ------------------------------------------------------
 
