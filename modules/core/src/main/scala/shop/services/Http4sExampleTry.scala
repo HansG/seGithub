@@ -38,13 +38,8 @@ import natchez.Trace.Implicits.noop
  *  #testtool mit json Ausgabe (und Eingabe) https://reqbin.com/
   *
   */
-class Http4sExample   {
+object Http4sExample   {
 
-  /** A data model with a Circe `Encoder` */
-  case class Country(code: String, name: String)
-  object Country {
-    implicit val encoderCountry: Encoder[Country] = deriveEncoder
-  }
 
 
 

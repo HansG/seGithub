@@ -2,7 +2,7 @@
 // This software is licensed under the MIT License (MIT).
 // For more information see LICENSE or https://opensource.org/licenses/MIT
 
-package shop.services
+package shop.domain.mongotry
 
 import cats._
 import cats.effect._
@@ -18,12 +18,12 @@ import natchez.Trace.Implicits.noop
 import org.http4s.HttpRoutes
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
+import shop.services.Http4sExample
 import skunk.codec.text.{bpchar, varchar}
 import skunk.implicits._
 import skunk.{Fragment, Query, Session, Void}
-import shop.services.Http4sExample
 
-object Http4sExampleTry1  extends IOApp {
+object Http4sMongoTry  extends IOApp {
 
   /** A data model with a Circe `Encoder` */
   case class Country(code: String, name: String)

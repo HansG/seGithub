@@ -22,7 +22,8 @@ import natchez.Trace
 import natchez.Trace.Implicits.noop
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
-
+import shop.services.Http4sExampleTry1.Country
+import shop.services.Http4sExample
 /**
   * A small but complete web service that serves data from the `world` database.
  * Note that the effect `F` is abstract throughout. So run this program and then try some requests:
@@ -31,7 +32,7 @@ import org.typelevel.log4cats.slf4j.Slf4jLogger
   *  curl -i http://localhost:8080/country/foobar
   *
   */
-object Http4sExample2 extends Http4sExample with IOApp  {
+object Http4sExample2 extends  IOApp  {
 
 
   /** A service interface and companion factory method. */
@@ -120,9 +121,9 @@ object Http4sExample2 extends Http4sExample with IOApp  {
     resResSession.map { rs =>
       val cs = countryServiceFrom(rs)
       val r = routesFrom(cs)
-      httpAppFrom(r)
+      Http4sExample.httpAppFrom(r)
     } flatMap { app =>
-      resServer(app)
+      Http4sExample.resServer(app)
     }
 
   implicit val logger = Slf4jLogger.getLogger[IO]
