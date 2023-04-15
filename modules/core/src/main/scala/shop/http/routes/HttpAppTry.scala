@@ -124,7 +124,7 @@ object HttAppTry extends IOApp.Simple {
   object ServiceAtHttpRoutes extends Http4sDsl[IO] {
     def apply(service: Service[IO]): HttpRoutes[IO] = HttpRoutes.of[IO] {
       case GET -> Root => Ok(service.findAll)
-      case req@POST -> Root =>
+      case req @ (POST -> Root) =>
         req.decodeR[ProdName] { pn =>
           service.create(pn).flatMap { id => //.toDomain
             Created(Prod(id, pn))

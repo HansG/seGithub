@@ -23,7 +23,7 @@ final case class CheckoutRoutes[F[_]: JsonDecoder: MonadThrow](
 
   private val httpRoutes: AuthedRoutes[CommonUser, F] = AuthedRoutes.of {
 
-    case ar @ POST -> Root as user =>
+    case ar @ ((POST -> Root) as user) =>
       ar.req.decodeR[Card] { card =>
         checkout
           .process(user.value.id, card)
