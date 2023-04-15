@@ -131,8 +131,14 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
 
 
    object PersonEntry {
-    def apply(firstName: String, lastName: String ) : PersonEntry = {
-       (String10.from(firstName)).map(fn => Person(fn, lastName)) .fold(i =>(Info(i)), p => p)
+     def toEntry[FTP](e : Either[String, FTP])(cons : FTP => PersonEntry) =
+       e.map(cons).fold(i =>(Info(i)), p => p)
+
+    def apply(firstName: String, lastName: String, balance : Option[Double] = None) : PersonEntry = {
+      toEntry(String10.from(firstName))(
+        fn => balance.fold[PersonEntry](Person(fn, lastName))
+                          ((bal:Double) => toEntry(Minus5To20.from(bal))(ba => PersonG(fn, lastName, ba) )  )
+      )
     }
   }
    object PersonGEntry {
@@ -208,7 +214,7 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
         coll <- db.createCollection("peopleG")
         coll <- db.getCollectionWithCodec[PersonEntry]("peopleG")
           persons = 1.to(3).map(i => PersonEntry("Egon"*i, "Keil" +i+"berg"))
-          personGs = 1.to(3).map(i => PersonGEntry("Bibi"*i, "Bloggs" +i+"berg", -10.0 + 10*i))
+          personGs = 1.to(3).map(i => PersonEntry("Bibi"*i, "Bloggs" +i+"berg", Some(-10.0 + 10*i)))
           infos = 1.to(3).map(i => Info("Schitt Fehler"))
         _    <- coll.insertMany(persons ++ personGs ++ infos)
         somePers <- coll.find.filter(Filter.gt("balance", 10.0)).all
