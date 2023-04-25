@@ -22,18 +22,18 @@ import org.http4s.HttpRoutes
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
 import shop.services.Http4sExample
-import skunk.codec.text.{ bpchar, varchar }
+import skunk.codec.text.{bpchar, varchar}
+import org.http4s.circe.CirceEntityEncoder._
 import skunk.implicits._
-import skunk.{ Fragment, Query, Session, Void }
-
+import skunk.{Fragment, Query, Session, Void}
 import mongo4cats.bson.ObjectId
 import mongo4cats.client.MongoClient
-import mongo4cats.circe.{ instantEncoder => _, instantDecoder => _, _ }
+import mongo4cats.circe.{instantDecoder => _, instantEncoder => _, _}
 import mongo4cats.database.GenericMongoDatabase
 import mongo4cats.operations.Filter
 import munit.CatsEffectSuite
-
 import mongo4cats.circe._
+import org.http4s.server.Server
 
 object Http4sMongoTry extends CatsEffectSuite {
 
@@ -48,7 +48,7 @@ object Http4sMongoTry extends CatsEffectSuite {
 
   /** A service interface and companion factory method. */
   trait CountryService[F[_]] {
-    def byCode(code: String): Option[Country]
+    def byCode(code: String): F[Option[Country]]
     def all: F[Stream[F, Country]]
   }
 
@@ -77,9 +77,9 @@ object Http4sMongoTry extends CatsEffectSuite {
 
   def resCountryService[F[_]: Monad: MonadCancel[*[_], Throwable]](
       mongoClientRes: Resource[F, MongoClient[F]]
-  ): Resource[F, F[CountryService[F]]] = {
+  ): Resource[F, CountryService[F]] = {
 
-    def mongoCollRes = mongoClientRes.map { client =>
+    def mongoCollRes = mongoClientRes.evalMap { client =>
       for {
         db <- client.getDatabase("testdb")
         //coll <- db.createCollection("country")
@@ -88,14 +88,12 @@ object Http4sMongoTry extends CatsEffectSuite {
     }
 
     mongoCollRes.map { coll =>
-      coll.map { co =>
         new CountryService[F] {
           def byCode(code: String): F[Option[Country]] =
-            co.find.filter(Filter.eq("code", code)).first
+            coll.find.filter(Filter.eq("code", code)).first
 
-          def all: Stream[F, Country] =  co.find.stream
+          def all: Stream[F, Country] =  coll.find.stream
         }
-      }
     }
   }
 
@@ -115,41 +113,38 @@ object Http4sMongoTry extends CatsEffectSuite {
   }
 */
   /** Resource yielding a pool of `CountryService`, backed by a single `Blocker` and `SocketGroup`. */
-  def resResCountryService[F[_]: Async : Concurrent: Network: Console: Trace: Temporal]
-      : Resource[F,  F[CountryService[F]]] =
+  def resResCountryService[F[_]: Async] : Resource[F,  CountryService[F]] =
     resCountryService(MongoClient.fromConnectionString[F]("mongodb://localhost:27017") )
 
   /** Given a pool of `Countries` we can create an `HttpRoutes`. */
   def resRoutes[F[_]: Concurrent](
-      resService: Resource[F, CountryService[F]]
-  ): Resource[F, HttpRoutes[F]] = {
+      resService: CountryService[F]
+  ): HttpRoutes[F] = {
     object dsl extends Http4sDsl[F];
     import dsl._
-    resService.map { countries =>
       HttpRoutes.of[F] {
         case GET -> Root / "country" / code =>
-          countries.byCode(code).flatMap {
-            case Some(c) => Ok(c.asJson)
-            case None    => NotFound(s"No country has code $code.")
-          }
+          Ok(resService.byCode(code)
+            .map(oc =>  oc.fold (
+            s"No country found with code $code.")((c: Country) => c.asJson.spaces4)))
 
         case GET -> Root / "countries" =>
-          countries.all.flatMap { st =>
+          resService.all.flatMap { st =>
             val stt = st.compile.toList.map(_.asJson) //how to use stream directly in the response?
             Ok(stt)
           }
       }
-    }
   }
 
   /** Our application as a resource. */
-  def resServer[F[_]: Async: Console: Trace]: Resource[F, Unit] =
-    for {
-      rs     <- resResCountryService
-      routes <- resRoutes(rs)
-      app = Http4sExample.httpAppFrom(routes)
-      _ <- Http4sExample.resServer(app)
-    } yield ()
+  def resServer[F[_]: Concurrent : Async: Console: Trace]: Resource[F,  Server] =
+    resResCountryService.map {
+      cs =>
+        val routes = resRoutes(cs)
+        Http4sExample.httpAppFrom(routes)
+    } .flatMap { app =>
+      Http4sExample.resServer(app)
+    }
 
   /** Main method instantiates `F` to `IO` and `use`s our resource forever. */
   def run(args: List[String]): IO[ExitCode] =
