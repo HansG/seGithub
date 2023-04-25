@@ -8,6 +8,8 @@ import cats._
 import cats.effect._
 import cats.effect.std.Console
 import cats.syntax.all._
+import derevo.circe.magnolia.{decoder, encoder}
+import derevo.derive
 import fs2.Stream
 import fs2.io.net.Network
 import io.circe.Encoder
@@ -20,32 +22,30 @@ import org.http4s.HttpRoutes
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
 import shop.services.Http4sExample
-import skunk.codec.text.{ bpchar, varchar }
+import skunk.codec.text.{bpchar, varchar}
 import skunk.implicits._
-import skunk.{ Fragment, Query, Session, Void }
-
+import skunk.{Fragment, Query, Session, Void}
 import mongo4cats.bson.ObjectId
 import mongo4cats.client.MongoClient
-import mongo4cats.circe.{ instantEncoder => _, instantDecoder => _, _ }
+import mongo4cats.circe.{instantDecoder => _, instantEncoder => _, _}
 import mongo4cats.database.GenericMongoDatabase
 import mongo4cats.operations.Filter
 import munit.CatsEffectSuite
-
 import mongo4cats.circe._
 
 object Http4sMongoTry extends CatsEffectSuite {
 
-  /** A data model with a Circe `Encoder` */
+  @derive(encoder, decoder)  /** A data model with a Circe `Encoder` */
   case class Country(code: String, name: String)
 
-  object Country {
+ /* object Country {
     implicit val encoderCountry: Encoder[Country] = deriveEncoder
-  }
+  }*/
 
   /** A service interface and companion factory method. */
   trait CountryService[F[_]] {
     def byCode(code: String): F[Option[Country]]
-    def all: F[Stream[F, Country]]
+    def all: Stream[F, Country]
   }
 
   /** Given a `Session` we can create a `Countries` resource with pre-prepared statements. */
@@ -63,7 +63,7 @@ object Http4sMongoTry extends CatsEffectSuite {
             psByCode.option(code)
           }
 
-        def all: F[Stream[F, Country]] =
+        def all: Stream[F, Country] =
           sess.prepare(countryQuery(Fragment.empty)).map { psAll =>
             psAll.stream(Void, 64)
           }
@@ -84,12 +84,13 @@ object Http4sMongoTry extends CatsEffectSuite {
     }
 
     mongoCollRes.map { coll =>
-      new CountryService[F] {
-        def byCode(code: String): F[Option[Country]] =
-          coll.find.filter(Filter.eq("code", code)).all
+      coll.map { co =>
+        new CountryService[F] {
+          def byCode(code: String): F[Option[Country]] =
+            co.find.filter(Filter.eq("code", code)).first
 
-        def all: F[Stream[F, Country]] =
-           coll.find.stream.compile.toList
+          def all: Stream[F, Country] =  co.find.stream
+        }
       }
     }
   }
