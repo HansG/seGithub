@@ -22,30 +22,34 @@ import org.http4s.HttpRoutes
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
 import shop.services.Http4sExample
-import skunk.codec.text.{bpchar, varchar}
+import skunk.codec.text.{ bpchar, varchar }
 import skunk.implicits._
-import skunk.{Fragment, Query, Session, Void}
+import skunk.{ Fragment, Query, Session, Void }
+
 import mongo4cats.bson.ObjectId
 import mongo4cats.client.MongoClient
-import mongo4cats.circe.{instantDecoder => _, instantEncoder => _, _}
+import mongo4cats.circe.{ instantEncoder => _, instantDecoder => _, _ }
 import mongo4cats.database.GenericMongoDatabase
 import mongo4cats.operations.Filter
 import munit.CatsEffectSuite
+
 import mongo4cats.circe._
 
 object Http4sMongoTry extends CatsEffectSuite {
 
-  @derive(encoder, decoder)  /** A data model with a Circe `Encoder` */
+  /** A data model with a Circe `Encoder` */
+  /** A data model with a Circe `Encoder` */
+  @derive(encoder, decoder)
   case class Country(code: String, name: String)
 
- /* object Country {
+  /* object Country {
     implicit val encoderCountry: Encoder[Country] = deriveEncoder
   }*/
 
   /** A service interface and companion factory method. */
   trait CountryService[F[_]] {
-    def byCode(code: String): F[Option[Country]]
-    def all: Stream[F, Country]
+    def byCode(code: String): Option[Country]
+    def all: F[Stream[F, Country]]
   }
 
   /** Given a `Session` we can create a `Countries` resource with pre-prepared statements. */
@@ -63,7 +67,7 @@ object Http4sMongoTry extends CatsEffectSuite {
             psByCode.option(code)
           }
 
-        def all: Stream[F, Country] =
+        def all: F[Stream[F, Country]] =
           sess.prepare(countryQuery(Fragment.empty)).map { psAll =>
             psAll.stream(Void, 64)
           }
@@ -73,7 +77,7 @@ object Http4sMongoTry extends CatsEffectSuite {
 
   def resCountryService[F[_]: Monad: MonadCancel[*[_], Throwable]](
       mongoClientRes: Resource[F, MongoClient[F]]
-  ): Resource[F, CountryService[F]] = {
+  ): Resource[F, F[CountryService[F]]] = {
 
     def mongoCollRes = mongoClientRes.map { client =>
       for {
@@ -111,9 +115,9 @@ object Http4sMongoTry extends CatsEffectSuite {
   }
 */
   /** Resource yielding a pool of `CountryService`, backed by a single `Blocker` and `SocketGroup`. */
-  def resResCountryService[F[_]: Concurrent: Network: Console: Trace: Temporal]
-      : Resource[F, Resource[F, CountryService[F]]] =
-    MongoClient.fromConnectionString[IO]("mongodb://localhost:27017").map(rs => resCountryService(rs))
+  def resResCountryService[F[_]: Async : Concurrent: Network: Console: Trace: Temporal]
+      : Resource[F,  F[CountryService[F]]] =
+    resCountryService(MongoClient.fromConnectionString[F]("mongodb://localhost:27017") )
 
   /** Given a pool of `Countries` we can create an `HttpRoutes`. */
   def resRoutes[F[_]: Concurrent](

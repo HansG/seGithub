@@ -50,6 +50,7 @@ lazy val tests = (project in file("modules/tests"))
       Libraries.weaverDiscipline,
       Libraries.logback % Runtime,
       Libraries.weaverScalaCheck,
+     // "io.github.quafadas" %% "scautable" % "0.0.5",
       "org.scalatest" %% "scalatest" % "3.2.15"
     ) ++
       dep("org.typelevel", "cats-effect", "3.3.12")("")("-laws", "-testkit") ++
