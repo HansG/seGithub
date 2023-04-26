@@ -34,8 +34,10 @@ import mongo4cats.operations.Filter
 import munit.CatsEffectSuite
 import mongo4cats.circe._
 import org.http4s.server.Server
+import org.typelevel.log4cats.slf4j.Slf4jLogger
 
-object Http4sMongoTry extends CatsEffectSuite {
+//object Http4sMongoTry extends CatsEffectSuite {
+object Http4sMongoTry extends IOApp {
 
   /** A data model with a Circe `Encoder` */
   @derive(encoder, decoder)
@@ -52,7 +54,7 @@ object Http4sMongoTry extends CatsEffectSuite {
   }
 
   /** Given a `Session` we can create a `Countries` resource with pre-prepared statements. */
-  def resCountryServiceP[F[_]: Monad: MonadCancel[*[_], Throwable]](
+  def countryServicePFrom[F[_]: Monad: MonadCancel[*[_], Throwable]](
       resSession: Resource[F, Session[F]]
   ): CountryService[F] = {
 
@@ -80,21 +82,19 @@ object Http4sMongoTry extends CatsEffectSuite {
                                                                     mongoClient: MongoClient[F]
   ):  CountryService[F]  = {
 
-    def mongoDb = mongoClient.getDatabase("testdb")
+    val countryColl = mongoClient.getDatabase("testdb").flatMap { db =>
+      db.getCollectionWithCodec[Country]("country")
+    }
 
     new CountryService[F] {
       def byCode(code: String): F[Option[Country]] =
-        mongoDb.map { db =>
-          db.getCollectionWithCodec[Country]("country").flatMap { coll =>
+        countryColl.flatMap { coll =>
             coll.find.filter(Filter.eq("code", code)).first
-          }
         }
 
       def all =
-        mongoDb.map {  db =>
-          db.getCollectionWithCodec[Country]("country").map { coll =>
+        countryColl.map {  coll =>
             coll.find.stream
-          }
         }
     }
   }
@@ -118,20 +118,43 @@ object Http4sMongoTry extends CatsEffectSuite {
   def countryServiceFromConnectionString[F[_]: Async](connectionString: String) : Resource[F, CountryService[F]] =
     MongoClient.fromConnectionString[F](connectionString).map( countryServiceFrom(_) )
 
+  
+  def countryServiceP[F[_]: Async: Console] : Resource[F, CountryService[F]] =
+    Session
+      .pooled[F](
+        host = "localhost",
+        port = 5432,
+        user = "jimmy",
+        password = Some("banana"),
+        database = "world",
+        max = 10,
+        commandCache = 0,
+        queryCache = 0
+      ).
+      map( countryServicePFrom(_) )
+
   /** Given a pool of `Countries` we can create an `HttpRoutes`. */
   def routesFrom[F[_]: Concurrent](
-      resService: CountryService[F]
+                                    countryService: CountryService[F]
   ): HttpRoutes[F] = {
     object dsl extends Http4sDsl[F];
     import dsl._
       HttpRoutes.of[F] {
-        case GET -> Root / "country" / code =>
-          Ok(resService.byCode(code)
+        case GET -> Root / "country1" / code =>
+          Ok(
+            countryService.byCode(code)
             .map(oc =>  oc.fold (
-            s"No country found with code $code.")((c: Country) => c.asJson.spaces4)))
+            s"No country found with code $code.")((c: Country) => c.asJson.spaces4))
+          )
+
+        case GET -> Root / "country" / code =>
+          countryService.byCode(code).flatMap {
+            case Some(c) => Ok(c.asJson)
+            case None => NotFound(s"No country has code $code.")
+          }
 
         case GET -> Root / "countries" =>
-          resService.all.flatMap { st =>
+          countryService.all.flatMap { st =>
             val stt = st.compile.toList.map(_.asJson) //how to use stream directly in the response?
             Ok(stt)
           }
@@ -140,13 +163,19 @@ object Http4sMongoTry extends CatsEffectSuite {
 
   /** Our application as a resource. */
   def resServer[F[_]: Concurrent : Async: Console: Trace]: Resource[F,  Server] =
-    countryServiceFromConnectionString ("mongodb://localhost:27017").map {
+  //  countryServiceFromConnectionString ("mongodb://localhost:27017").map {
+    countryServiceP.map {
       countryService =>
         val routes = routesFrom(countryService)
         Http4sExample.httpAppFrom(routes)
     } .flatMap { app =>
       Http4sExample.resServer(app)
     }
+
+
+
+  implicit val logger = Slf4jLogger.getLogger[IO]
+
 
   /** Main method instantiates `F` to `IO` and `use`s our resource forever. */
   def run(args: List[String]): IO[ExitCode] =
