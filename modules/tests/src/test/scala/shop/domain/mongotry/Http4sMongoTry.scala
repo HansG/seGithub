@@ -163,8 +163,8 @@ object Http4sMongoTry extends IOApp {
 
   /** Our application as a resource. */
   def resServer[F[_]: Concurrent : Async: Console: Trace]: Resource[F,  Server] =
-  //  countryServiceFromConnectionString ("mongodb://localhost:27017").map {
-    countryServiceP.map {
+   countryServiceFromConnectionString ("mongodb://localhost:27017").map {
+  //    countryServiceP.map {
       countryService =>
         val routes = routesFrom(countryService)
         Http4sExample.httpAppFrom(routes)
