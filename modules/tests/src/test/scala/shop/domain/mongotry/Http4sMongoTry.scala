@@ -51,6 +51,9 @@ object Http4sMongoTry extends IOApp {
   trait CountryService[F[_]] {
     def byCode(code: String): F[Option[Country]]
     def all: F[Stream[F, Country]]
+    
+    
+    
   }
 
   /** Given a `Session` we can create a `Countries` resource with pre-prepared statements. */
