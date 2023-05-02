@@ -33,8 +33,12 @@ import mongo4cats.database.GenericMongoDatabase
 import mongo4cats.operations.Filter
 import munit.CatsEffectSuite
 import mongo4cats.circe._
+import org.bson.BsonValue
 import org.http4s.server.Server
 import org.typelevel.log4cats.slf4j.Slf4jLogger
+
+import scala.jdk.CollectionConverters._
+import java.util.UUID
 
 //object Http4sMongoTry extends CatsEffectSuite {
 object Http4sMongoTry extends IOApp {
@@ -52,7 +56,7 @@ object Http4sMongoTry extends IOApp {
     def byCode(code: String): F[Option[Country]]
     def all: F[Stream[F, Country]]
     
-    def save(cl : List[Country]) : F[Void]
+    def save(cl : List[Country]) : F[Stream[F, String]]
     
   }
 
@@ -79,7 +83,7 @@ object Http4sMongoTry extends IOApp {
           }
         }
 
-      def save(cl : List[Country]) : F[Void] = Monad[F].unit
+      def save(cl : List[Country]) : F[Unit] = Monad[F].unit
 
 
     }
@@ -104,9 +108,12 @@ object Http4sMongoTry extends IOApp {
             coll.find.stream
         }
 
-      override def save(cl: List[Country]): F[Void] = countryColl.flatMap { coll =>
-        coll.insertMany(cl).void
-//        coll.insertMany(cl).map((im => im.getInsertedIds.values().stream.map((bv : BsonValue) => bv.)))
+      override def save(cl: List[Country]): F[Unit] = countryColl.flatMap { coll =>
+        //     coll.insertMany(cl).
+        coll.insertMany(cl).map(im =>  {
+         val it =  im.getInsertedIds.asScala.map{  v => v._2.asObjectId.getValue().toString } )
+
+        }
       }
     }
   }
@@ -174,8 +181,8 @@ object Http4sMongoTry extends IOApp {
   }
 
   /** Our application as a resource. */
-  def resServer: Resource[F[_],  Server] =
-   countryServiceFromConnectionString[F[_]]("mongodb://localhost:27017").map {
+  def resServer[F[_]: Async: Console]: Resource[F,  Server] =
+   countryServiceFromConnectionString[F]("mongodb://localhost:27017").map {
   //    countryServiceP.map {
       countryService =>
         val routes = routesFrom(countryService)
@@ -185,9 +192,15 @@ object Http4sMongoTry extends IOApp {
     }
 
 
-//  def transferData[F[_]: Concurrent : Async: Console: Trace](csQuelle : CountryService[F], csZiel : CountryService[F]) =
-//    csQuelle.all.flatMap(cstream = > cstream.       )
+  def transferData[F[_]: Concurrent : Async: Console: Trace](csQuelle : CountryService[F], csZiel : CountryService[F]) = {
+    for {
+      st <- csQuelle.all
+      cst = st.chunkN(10, true)
+      _ <-  cst.flatMap(chunk => csZiel.save(chunk.toList))
+    } yield cst
 
+  //  csQuelle.all.map(st => st.chunkN(10, true)).flatMap( chunk => csZiel.save(chunk.))
+  }
 
 
   implicit val logger = Slf4jLogger.getLogger[IO]
