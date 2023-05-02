@@ -52,7 +52,7 @@ object Http4sMongoTry extends IOApp {
     def byCode(code: String): F[Option[Country]]
     def all: F[Stream[F, Country]]
     
-    
+    def save(cl : List[Country]) : F[Void]
     
   }
 
@@ -78,6 +78,10 @@ object Http4sMongoTry extends IOApp {
             psAll.stream(Void, 64)
           }
         }
+
+      def save(cl : List[Country]) : F[Void] = Monad[F].unit
+
+
     }
   }
 
@@ -99,6 +103,11 @@ object Http4sMongoTry extends IOApp {
         countryColl.map {  coll =>
             coll.find.stream
         }
+
+      override def save(cl: List[Country]): F[Void] = countryColl.flatMap { coll =>
+        coll.insertMany(cl).void
+//        coll.insertMany(cl).map((im => im.getInsertedIds.values().stream.map((bv : BsonValue) => bv.)))
+      }
     }
   }
 
@@ -165,8 +174,8 @@ object Http4sMongoTry extends IOApp {
   }
 
   /** Our application as a resource. */
-  def resServer[F[_]: Concurrent : Async: Console: Trace]: Resource[F,  Server] =
-   countryServiceFromConnectionString ("mongodb://localhost:27017").map {
+  def resServer: Resource[F[_],  Server] =
+   countryServiceFromConnectionString[F[_]]("mongodb://localhost:27017").map {
   //    countryServiceP.map {
       countryService =>
         val routes = routesFrom(countryService)
@@ -174,6 +183,10 @@ object Http4sMongoTry extends IOApp {
     } .flatMap { app =>
       Http4sExample.resServer(app)
     }
+
+
+//  def transferData[F[_]: Concurrent : Async: Console: Trace](csQuelle : CountryService[F], csZiel : CountryService[F]) =
+//    csQuelle.all.flatMap(cstream = > cstream.       )
 
 
 
