@@ -37,6 +37,7 @@ import org.bson.BsonValue
 import org.http4s.server.Server
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
+import java.math.BigInteger
 import scala.jdk.CollectionConverters._
 import java.util.UUID
 
@@ -55,9 +56,9 @@ object Http4sMongoTry extends IOApp {
   trait CountryService[F[_]] {
     def byCode(code: String): F[Option[Country]]
     def all: F[Stream[F, Country]]
-    
-    def save(cl : List[Country]) : F[Stream[F, String]]
-    
+
+    def save(cl: List[Country]): F[List[BigInteger]]
+
   }
 
   /** Given a `Session` we can create a `Countries` resource with pre-prepared statements. */
@@ -83,15 +84,14 @@ object Http4sMongoTry extends IOApp {
           }
         }
 
-      def save(cl : List[Country]) : F[Unit] = Monad[F].unit
-
+      def save(cl: List[Country]): F[Unit] = Monad[F].unit
 
     }
   }
 
   def countryServiceFrom[F[_]: Monad: MonadCancel[*[_], Throwable]](
-                                                                    mongoClient: MongoClient[F]
-  ):  CountryService[F]  = {
+      mongoClient: MongoClient[F]
+  ): CountryService[F] = {
 
     val countryColl = mongoClient.getDatabase("testdb").flatMap { db =>
       db.getCollectionWithCodec[Country]("country")
@@ -100,25 +100,28 @@ object Http4sMongoTry extends IOApp {
     new CountryService[F] {
       def byCode(code: String): F[Option[Country]] =
         countryColl.flatMap { coll =>
-            coll.find.filter(Filter.eq("code", code)).first
+          coll.find.filter(Filter.eq("code", code)).first
         }
 
       def all =
-        countryColl.map {  coll =>
-            coll.find.stream
+        countryColl.map { coll =>
+          coll.find.stream
         }
 
-      override def save(cl: List[Country]): F[Unit] = countryColl.flatMap { coll =>
-        //     coll.insertMany(cl).
-        coll.insertMany(cl).map(im =>  {
-         val it =  im.getInsertedIds.asScala.map{  v => v._2.asObjectId.getValue().toString } )
+      override def save(cl: List[Country]): F[List[BigInteger]] = countryColl.flatMap { coll =>
+        coll
+          .insertMany(cl)
+          .map(im => {
+            im.getInsertedIds.asScala.values.map { v =>
+              new BigInteger(v.asObjectId.getValue.toByteArray)
+            }.toList
+          })
 
-        }
       }
     }
   }
 
- /*
+  /*
   test("PersonG mongo") {
     mongoClientRes.use { client =>
       for {
@@ -132,13 +135,12 @@ object Http4sMongoTry extends IOApp {
       } yield ()
     }
   }
-*/
+   */
   /** Resource yielding a pool of `CountryService`, backed by a single `Blocker` and `SocketGroup`. */
-  def countryServiceFromConnectionString[F[_]: Async](connectionString: String) : Resource[F, CountryService[F]] =
-    MongoClient.fromConnectionString[F](connectionString).map( countryServiceFrom(_) )
+  def countryServiceFromConnectionString[F[_]: Async](connectionString: String): Resource[F, CountryService[F]] =
+    MongoClient.fromConnectionString[F](connectionString).map(countryServiceFrom(_))
 
-  
-  def countryServiceP[F[_]: Async: Console] : Resource[F, CountryService[F]] =
+  def countryServiceP[F[_]: Async: Console]: Resource[F, CountryService[F]] =
     Session
       .pooled[F](
         host = "localhost",
@@ -149,62 +151,61 @@ object Http4sMongoTry extends IOApp {
         max = 10,
         commandCache = 0,
         queryCache = 0
-      ).
-      map( countryServicePFrom(_) )
+      )
+      .map(countryServicePFrom(_))
 
   /** Given a pool of `Countries` we can create an `HttpRoutes`. */
   def routesFrom[F[_]: Concurrent](
-                                    countryService: CountryService[F]
+      countryService: CountryService[F]
   ): HttpRoutes[F] = {
     object dsl extends Http4sDsl[F];
     import dsl._
-      HttpRoutes.of[F] {
-        case GET -> Root / "country1" / code =>
-          Ok(
-            countryService.byCode(code)
-            .map(oc =>  oc.fold (
-            s"No country found with code $code.")((c: Country) => c.asJson.spaces4))
-          )
+    HttpRoutes.of[F] {
+      case GET -> Root / "country1" / code =>
+        Ok(
+          countryService
+            .byCode(code)
+            .map(oc => oc.fold(s"No country found with code $code.")((c: Country) => c.asJson.spaces4))
+        )
 
-        case GET -> Root / "country" / code =>
-          countryService.byCode(code).flatMap {
-            case Some(c) => Ok(c.asJson)
-            case None => NotFound(s"No country has code $code.")
-          }
+      case GET -> Root / "country" / code =>
+        countryService.byCode(code).flatMap {
+          case Some(c) => Ok(c.asJson)
+          case None    => NotFound(s"No country has code $code.")
+        }
 
-        case GET -> Root / "countries" =>
-          countryService.all.flatMap { st =>
-            val stt = st.compile.toList.map(_.asJson) //how to use stream directly in the response?
-            Ok(stt)
-          }
-      }
+      case GET -> Root / "countries" =>
+        countryService.all.flatMap { st =>
+          val stt = st.compile.toList.map(_.asJson) //how to use stream directly in the response?
+          Ok(stt)
+        }
+    }
   }
 
   /** Our application as a resource. */
-  def resServer[F[_]: Async: Console]: Resource[F,  Server] =
-   countryServiceFromConnectionString[F]("mongodb://localhost:27017").map {
-  //    countryServiceP.map {
-      countryService =>
-        val routes = routesFrom(countryService)
-        Http4sExample.httpAppFrom(routes)
-    } .flatMap { app =>
-      Http4sExample.resServer(app)
-    }
+  def resServer[F[_]: Async: Console]: Resource[F, Server] =
+    countryServiceFromConnectionString[F]("mongodb://localhost:27017")
+      .map {
+        //    countryServiceP.map {
+        countryService =>
+          val routes = routesFrom(countryService)
+          Http4sExample.httpAppFrom(routes)
+      }
+      .flatMap { app =>
+        Http4sExample.resServer(app)
+      }
 
-
-  def transferData[F[_]: Concurrent : Async: Console: Trace](csQuelle : CountryService[F], csZiel : CountryService[F]) = {
+  def transferData[F[_]: Concurrent: Async: Console: Trace](csQuelle: CountryService[F], csZiel: CountryService[F]) = {
     for {
       st <- csQuelle.all
       cst = st.chunkN(10, true)
-      _ <-  cst.flatMap(chunk => csZiel.save(chunk.toList))
+      _ <- cst.flatMap(chunk => csZiel.save(chunk.toList))
     } yield cst
 
-  //  csQuelle.all.map(st => st.chunkN(10, true)).flatMap( chunk => csZiel.save(chunk.))
+    //  csQuelle.all.map(st => st.chunkN(10, true)).flatMap( chunk => csZiel.save(chunk.))
   }
 
-
   implicit val logger = Slf4jLogger.getLogger[IO]
-
 
   /** Main method instantiates `F` to `IO` and `use`s our resource forever. */
   def run(args: List[String]): IO[ExitCode] =
