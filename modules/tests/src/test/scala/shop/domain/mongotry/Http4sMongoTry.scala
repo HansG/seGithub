@@ -8,7 +8,7 @@ import cats._
 import cats.effect._
 import cats.effect.std.Console
 import cats.syntax.all._
-import derevo.circe.magnolia.{decoder, encoder}
+import derevo.circe.magnolia.{ decoder, encoder }
 import derevo.derive
 import fs2.Stream
 import fs2.io.net.Network
@@ -22,13 +22,13 @@ import org.http4s.HttpRoutes
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
 import shop.services.Http4sExample
-import skunk.codec.text.{bpchar, varchar}
+import skunk.codec.text.{ bpchar, varchar }
 import org.http4s.circe.CirceEntityEncoder._
 import skunk.implicits._
-import skunk.{Fragment, Query, Session, Void}
+import skunk.{ Fragment, Query, Session, Void }
 import mongo4cats.bson.ObjectId
 import mongo4cats.client.MongoClient
-import mongo4cats.circe.{instantDecoder => _, instantEncoder => _, _}
+import mongo4cats.circe.{ instantDecoder => _, instantEncoder => _, _ }
 import mongo4cats.database.GenericMongoDatabase
 import mongo4cats.operations.Filter
 import munit.CatsEffectSuite
@@ -89,8 +89,9 @@ object Http4sMongoTry extends IOApp {
     }
   }
 
-  def countryServiceFrom[F[_]: Monad: MonadCancel[*[_], Throwable]](
-      mongoClient: MongoClient[F], tablename : String = "country"
+  def countryServiceFrom[F[_]: Monad: MonadCancel[*[_], Throwable]: Console](
+      mongoClient: MongoClient[F],
+      tablename: String
   ): CountryService[F] = {
 
     val countryColl = mongoClient.getDatabase("testdb").flatMap { db =>
@@ -109,14 +110,15 @@ object Http4sMongoTry extends IOApp {
         }
 
       override def save(cl: List[Country]): F[List[BigInteger]] = countryColl.flatMap { coll =>
-        coll
-          .insertMany(cl)
-          .map(im => {
-            im.getInsertedIds.asScala.values.map { v =>
-              new BigInteger(v.asObjectId.getValue.toByteArray)
-            }.toList
-          })
-
+        Console[F].println(s"insertMany $cl").flatMap(_ =>
+          coll
+            .insertMany(cl)
+            .map(im => {
+              im.getInsertedIds.asScala.values.map { v =>
+                new BigInteger(v.asObjectId.getValue.toByteArray)
+              }.toList
+            })
+        )
       }
     }
   }
@@ -137,7 +139,10 @@ object Http4sMongoTry extends IOApp {
   }
    */
   /** Resource yielding a pool of `CountryService`, backed by a single `Blocker` and `SocketGroup`. */
-  def countryServiceFromConnectionString[F[_]: Async](connectionString: String, tablename : String = "country"): Resource[F, CountryService[F]] =
+  def countryServiceFromConnectionString[F[_]: Async: Console](
+      connectionString: String,
+      tablename: String = "country"
+  ): Resource[F, CountryService[F]] =
     MongoClient.fromConnectionString[F](connectionString).map(countryServiceFrom(_, tablename))
 
   def countryServiceP[F[_]: Async: Console]: Resource[F, CountryService[F]] =
@@ -145,9 +150,12 @@ object Http4sMongoTry extends IOApp {
       .pooled[F](
         host = "localhost",
         port = 5432,
-        user = "jimmy",
-        password = Some("banana"),
-        database = "world",
+        user = "postgres",
+        password = Some("postgres"),
+        database = "skunk",
+//        user = "jimmy",
+//        password = Some("banana"),
+//        database = "world",
         max = 10,
         commandCache = 0,
         queryCache = 0
@@ -195,15 +203,19 @@ object Http4sMongoTry extends IOApp {
         Http4sExample.resServer(app)
       }
 
-  def transferData[F[_]: Concurrent: Async: Console: Trace](csQuelle: CountryService[F], csZiel: CountryService[F]): F[Unit] = {
+  def transferData[F[_]: Concurrent: Async: Console: Trace](
+      csQuelle: CountryService[F],
+      csZiel: CountryService[F]
+  ): F[Unit] = {
     for {
       st <- csQuelle.all
       cst = st.chunkN(10, true)
       u <- cst
-        .evalTap(chunk =>  Console[F].println(s"Current chunk: $chunk")  )
-        .evalMap(chunk =>   csZiel.save(chunk.toList) )
-        .evalTap(ids =>  Console[F].println(s"Current Ids: $ids")  )
-        .compile.drain
+        .evalTap(chunk => Console[F].println(s"Current chunk: $chunk"))
+        .evalMap(chunk => csZiel.save(chunk.toList))
+        .evalTap(ids => Console[F].println(s"Current Ids: $ids"))
+        .compile
+        .drain
     } yield u
   }
 
@@ -216,11 +228,14 @@ object Http4sMongoTry extends IOApp {
   def run1(args: List[String]): IO[ExitCode] =
     resServer[IO].useForever
 
-  case class ServicePair[F[_]](s1 : Resource[F, CountryService[F]], s2 : Resource[F, CountryService[F]])
- def run2(args: List[String]): IO[ExitCode] = {
-   (countryServiceP[IO] , countryServiceFromConnectionString[IO]("mongodb://localhost:27017", "countryT")).mapN(ServicePair[IO](_,_)).use { sp =>
-     transferData(sp.s1,sp.s1)
-   }.as(ExitCode.Success)
- }
+  case class ServicePair[F[_]](s1: CountryService[F], s2: CountryService[F])
+  def run2(args: List[String]): IO[ExitCode] = {
+    (countryServiceP[IO], countryServiceFromConnectionString[IO]("mongodb://localhost:27017", "countryT"))
+      .parMapN(ServicePair[IO](_, _))
+      .use { sp =>
+        transferData(sp.s1, sp.s1)
+      }
+      .as(ExitCode.Success)
+  }
 
 }
