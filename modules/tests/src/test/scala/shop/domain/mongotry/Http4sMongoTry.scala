@@ -94,7 +94,7 @@ object Http4sMongoTry extends IOApp {
       tablename: String
   ): CountryService[F] = {
 
-    val countryColl = mongoClient.getDatabase("testdbX").flatMap { db =>
+    val countryColl = mongoClient.getDatabase("testdb").flatMap { db =>
       db.getCollectionWithCodec[Country](tablename)
     }
 
