@@ -84,17 +84,17 @@ object Http4sMongoTry extends IOApp {
           }
         }
 
-      def save(cl: List[Country]): F[Unit] = Monad[F].unit
+      def save(cl: List[Country]): F[List[BigInteger]] = Monad[F].unit.as(List())
 
     }
   }
 
   def countryServiceFrom[F[_]: Monad: MonadCancel[*[_], Throwable]](
-      mongoClient: MongoClient[F]
+      mongoClient: MongoClient[F], tablename : String = "country"
   ): CountryService[F] = {
 
     val countryColl = mongoClient.getDatabase("testdb").flatMap { db =>
-      db.getCollectionWithCodec[Country]("country")
+      db.getCollectionWithCodec[Country](tablename)
     }
 
     new CountryService[F] {
@@ -137,8 +137,8 @@ object Http4sMongoTry extends IOApp {
   }
    */
   /** Resource yielding a pool of `CountryService`, backed by a single `Blocker` and `SocketGroup`. */
-  def countryServiceFromConnectionString[F[_]: Async](connectionString: String): Resource[F, CountryService[F]] =
-    MongoClient.fromConnectionString[F](connectionString).map(countryServiceFrom(_))
+  def countryServiceFromConnectionString[F[_]: Async](connectionString: String, tablename : String = "country"): Resource[F, CountryService[F]] =
+    MongoClient.fromConnectionString[F](connectionString).map(countryServiceFrom(_, tablename))
 
   def countryServiceP[F[_]: Async: Console]: Resource[F, CountryService[F]] =
     Session
@@ -195,20 +195,32 @@ object Http4sMongoTry extends IOApp {
         Http4sExample.resServer(app)
       }
 
-  def transferData[F[_]: Concurrent: Async: Console: Trace](csQuelle: CountryService[F], csZiel: CountryService[F]) = {
+  def transferData[F[_]: Concurrent: Async: Console: Trace](csQuelle: CountryService[F], csZiel: CountryService[F]): F[Unit] = {
     for {
       st <- csQuelle.all
       cst = st.chunkN(10, true)
-      _ <- cst.flatMap(chunk => csZiel.save(chunk.toList))
-    } yield cst
-
-    //  csQuelle.all.map(st => st.chunkN(10, true)).flatMap( chunk => csZiel.save(chunk.))
+      u <- cst
+        .evalTap(chunk =>  Console[F].println(s"Current chunk: $chunk")  )
+        .evalMap(chunk =>   csZiel.save(chunk.toList) )
+        .evalTap(ids =>  Console[F].println(s"Current Ids: $ids")  )
+        .compile.drain
+    } yield u
   }
 
   implicit val logger = Slf4jLogger.getLogger[IO]
 
   /** Main method instantiates `F` to `IO` and `use`s our resource forever. */
   def run(args: List[String]): IO[ExitCode] =
+    run2(args)
+
+  def run1(args: List[String]): IO[ExitCode] =
     resServer[IO].useForever
+
+  case class ServicePair[F[_]](s1 : Resource[F, CountryService[F]], s2 : Resource[F, CountryService[F]])
+ def run2(args: List[String]): IO[ExitCode] = {
+   (countryServiceP[IO] , countryServiceFromConnectionString[IO]("mongodb://localhost:27017", "countryT")).mapN(ServicePair[IO](_,_)).use { sp =>
+     transferData(sp.s1,sp.s1)
+   }.as(ExitCode.Success)
+ }
 
 }
