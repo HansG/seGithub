@@ -140,7 +140,7 @@ object Http4sMongoTry extends IOApp {
    */
   /** Resource yielding a pool of `CountryService`, backed by a single `Blocker` and `SocketGroup`. */
   def countryServiceFromConnectionString[F[_]: Async: Console](
-      connectionString: String,
+      connectionString: String = "mongodb://localhost:27017",
       tablename: String = "country"
   ): Resource[F, CountryService[F]] =
     MongoClient.fromConnectionString[F](connectionString).map(countryServiceFrom(_, tablename))
@@ -239,3 +239,7 @@ object Http4sMongoTry extends IOApp {
   }
 
 }
+
+
+
+
