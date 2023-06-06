@@ -4,7 +4,7 @@ import cats.effect.kernel.Deferred
 import cats.effect.std.Supervisor
 import cats.effect.testkit.TestControl
 import cats.effect.{Async, ExitCode, IO, IOApp, LiftIO, Ref, Sync}
-import cats.implicits.catsSyntaxEitherId
+import cats.implicits.{catsSyntaxEitherId, toFlatMapOps, toFunctorOps}
 import fs2._
 import fs2.concurrent.SignallingRef
 import munit.{CatsEffectSuite, ScalaCheckEffectSuite}
@@ -60,28 +60,55 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
 
 
-
-  def writeToSocket[F[_]: Async](chunk: Chunk[String]): F[Unit] =
+  //asynchron
+  def writeToSocketA[F[_]: Async](chunk: Chunk[String]): F[String] =
     Async[F].async { callback =>
       println(s"[thread: ${Thread.currentThread().getName}] :: Writing $chunk to socket")
-      callback(Right(()))
+      callback(Right("Hi"))
       Sync[F].delay(Some(Sync[F].delay(())))
     }
 
-  def writeToSocket0[F[_]: Async](chunk: Chunk[String]): IO[Unit] =
-    IO(println(s"[thread: ${Thread.currentThread().getName}] :: Writing $chunk to socket"))
+  //synchron
+  def writeToSocketS[F[_]: Sync](chunk: Chunk[String]): F[Unit] =
+    Sync[F].delay(println(s"[thread: ${Thread.currentThread().getName}] :: Writing $chunk to socket"))
+
+  //synchron mit Exception
+  def writeToSocketSE[F[_]: Sync](chunk: Chunk[String]): F[Int] =
+    Random.scalaUtilRandom(Sync[F]).flatMap { r =>
+      r.nextInt.map { rn =>
+        println(s"[thread: ${Thread.currentThread().getName}] :: Writing $chunk to socket")
+        if (rn % 2 == 0) {
+          throw new RuntimeException(s"RuntimeException bei  $chunk")
+        }
+        println(s"Saved:  $chunk mit id $rn")
+        rn
+      }
+    }
+
 
   val stpwrite = Stream((1 to 100).map(_.toString): _*)
     .chunkN(10)
     .covary[IO]
-    .parEvalMapUnordered(10)(writeToSocket[IO])
+
+  val stpwriteA = stpwrite
+    .parEvalMapUnordered(10)(writeToSocketA[IO])
+
+  val stpwriteSE = stpwrite
+    .parEvalMapUnordered(10)(writeToSocketSE[IO])
+    //   .handleErrorWith(error => Stream.eval(IO.println(s"Error: $error")))
+    .attempt
+    .evalMap {
+      case Left(error) => IO.println(s"Nach attempt: Left Error: $error")
+      case Right(id) => IO.println(s"Nach attempt: Right: $id")
+    }
+
 
   test("run  Stream parEvalMapUnordered  chunkN ") {
-    runStream(stpwrite)
+    runStream(stpwriteA)
   }
 
   test("2run  Stream parEvalMapUnordered  chunkN ") {
-    runStream(stpwrite)
+    runStream(stpwriteSE)
   }
 
 
