@@ -1,10 +1,11 @@
 package exa.scs
 
+import cats.MonadThrow
 import cats.effect.kernel.Deferred
 import cats.effect.std.Supervisor
 import cats.effect.testkit.TestControl
 import cats.effect.{Async, ExitCode, IO, IOApp, LiftIO, Ref, Sync}
-import cats.implicits.{catsSyntaxEitherId, toFlatMapOps, toFunctorOps}
+import cats.implicits.{catsSyntaxEitherId, catsSyntaxFlatMapOps, toFlatMapOps, toFunctorOps}
 import fs2._
 import fs2.concurrent.SignallingRef
 import munit.{CatsEffectSuite, ScalaCheckEffectSuite}
@@ -73,8 +74,8 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
     Sync[F].delay(println(s"[thread: ${Thread.currentThread().getName}] :: Writing $chunk to socket"))
 
   //synchron mit Exception
-  def writeToSocketSE[F[_]: Sync](chunk: Chunk[String]): F[Int] =
-    Random.scalaUtilRandom(Sync[F]).flatMap { r =>
+  def writeToSocketSE[F[_]: Sync : MonadThrow](chunk: Chunk[String]): F[Int] = {
+      val fa = Random.scalaUtilRandom(Sync[F]).flatMap { r =>
       r.nextInt.map { rn =>
         println(s"[thread: ${Thread.currentThread().getName}] :: Writing $chunk to socket")
         if (rn % 2 == 0) {
@@ -84,6 +85,9 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
         rn
       }
     }
+    fa
+ //   MonadThrow[F].handleErrorWith(fa)(e => Sync[F].delay(println(s"Exception $e")) >> Sync[F].delay(43) )
+  }
 
 
   val stpwrite = Stream((1 to 100).map(_.toString): _*)
@@ -96,19 +100,26 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
   val stpwriteSE = stpwrite
     .parEvalMapUnordered(10)(writeToSocketSE[IO])
     //   .handleErrorWith(error => Stream.eval(IO.println(s"Error: $error")))
-    .attempt
-    .evalMap {
+    .attempt.evalMap {
       case Left(error) => IO.println(s"Nach attempt: Left Error: $error")
       case Right(id) => IO.println(s"Nach attempt: Right: $id")
     }
 
+  val acquire = IO {
+    println(s"Acquiring connection to the database: 17")
+    17
+  }
+  val release = (conn: Int) =>
+    IO.println(s"Releasing connection to the database: $conn")
+
+  val stpwriteResSE = Stream.bracket(acquire )(release).flatMap(conn =>  stpwriteSE)
 
   test("run  Stream parEvalMapUnordered  chunkN ") {
     runStream(stpwriteA)
   }
 
   test("2run  Stream parEvalMapUnordered  chunkN ") {
-    runStream(stpwriteSE)
+    runStream(stpwriteResSE)
   }
 
 

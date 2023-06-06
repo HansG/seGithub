@@ -57,7 +57,7 @@ object Http4sMongoTry extends IOApp {
     def byCode(code: String): F[Option[Country]]
     def all: F[Stream[F, Country]]
 
-    def save(cl: List[Country]): F[List[BigInteger]]
+    def save(cl: List[Country]): F[List[Array[Byte]]]
 
   }
 
@@ -84,7 +84,7 @@ object Http4sMongoTry extends IOApp {
           }
         }
 
-      def save(cl: List[Country]): F[List[BigInteger]] = Monad[F].unit.as(List())
+      def save(cl: List[Country]): F[List[Array[Byte]]] = Monad[F].unit.as(List())
 
     }
   }
@@ -109,13 +109,13 @@ object Http4sMongoTry extends IOApp {
           coll.find.stream
         }
 
-      override def save(cl: List[Country]): F[List[BigInteger]] = countryColl.flatMap { coll =>
+      override def save(cl: List[Country]): F[List[Array[Byte]]] = countryColl.flatMap { coll =>
         Console[F].println(s"insertMany $cl").flatMap(_ =>
           coll
             .insertMany(cl)
             .map(im => {
               im.getInsertedIds.asScala.values.map { v =>
-                new BigInteger(v.asObjectId.getValue.toByteArray)
+                v.asObjectId.getValue.toByteArray
               }.toList
             })
         )
@@ -228,12 +228,11 @@ object Http4sMongoTry extends IOApp {
   def run1(args: List[String]): IO[ExitCode] =
     resServer[IO].useForever
 
-  case class ServicePair[F[_]](s1: CountryService[F], s2: CountryService[F])
   def run2(args: List[String]): IO[ExitCode] = {
     (countryServiceP[IO], countryServiceFromConnectionString[IO]("mongodb://localhost:27017", "countryT"))
-      .parMapN(ServicePair[IO](_, _))
+      .parMapN((_, _))
       .use { sp =>
-        transferData(sp.s1, sp.s1)
+        transferData(sp._1, sp._2)
       }
       .as(ExitCode.Success)
   }
