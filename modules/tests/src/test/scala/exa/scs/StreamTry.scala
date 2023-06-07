@@ -62,7 +62,7 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
 
   //asynchron
-  def writeToSocketA[F[_]: Async](chunk: Chunk[String]): F[String] =
+  def writeToSocketAsync[F[_]: Async](chunk: Chunk[String]): F[String] =
     Async[F].async { callback =>
       println(s"[thread: ${Thread.currentThread().getName}] :: Writing $chunk to socket")
       callback(Right("Hi"))
@@ -70,11 +70,11 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
     }
 
   //synchron
-  def writeToSocketS[F[_]: Sync](chunk: Chunk[String]): F[Unit] =
+  def writeToSocketSync[F[_]: Sync](chunk: Chunk[String]): F[Unit] =
     Sync[F].delay(println(s"[thread: ${Thread.currentThread().getName}] :: Writing $chunk to socket"))
 
   //synchron mit Exception
-  def writeToSocketSE[F[_]: Sync : MonadThrow](chunk: Chunk[String]): F[Int] = {
+  def writeToSocketSyncEx[F[_]: Sync : MonadThrow](chunk: Chunk[String], handleEx: Boolean)  = {
       val fa = Random.scalaUtilRandom(Sync[F]).flatMap { r =>
       r.nextInt.map { rn =>
         println(s"[thread: ${Thread.currentThread().getName}] :: Writing $chunk to socket")
@@ -85,20 +85,23 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
         rn
       }
     }
-    fa
- //   MonadThrow[F].handleErrorWith(fa)(e => Sync[F].delay(println(s"Exception $e")) >> Sync[F].delay(43) )
+    if(handleEx) fa else  MonadThrow[F].handleErrorWith(fa)(e => Sync[F].delay(println(s"Exception $e")) >> Sync[F].delay(43) )
   }
 
 
-  val stpwrite = Stream((1 to 100).map(_.toString): _*)
+  val sourceStream = Stream((1 to 100).map(_.toString): _*)
     .chunkN(10)
     .covary[IO]
 
-  val stpwriteA = stpwrite
-    .parEvalMapUnordered(10)(writeToSocketA[IO])
+  val writeStreamAsync = sourceStream
+    .parEvalMapUnordered(10)(writeToSocketAsync[IO])
 
-  val stpwriteSE = stpwrite
-    .parEvalMapUnordered(10)(writeToSocketSE[IO])
+  /*
+  bei Exception in Stream-Werten: Stream wird abgebrochen -> jedoch noch handleErrorWith, attempt  etc. möglich
+  falls Stream weiterlaufen soll: in Effekt zur Erzeugung der Stream-Werte: : MonadThrow und handleErrorWith oder attempt...
+   */
+  val writeStreamAsyncEx = sourceStream
+    .parEvalMapUnordered(10)(writeToSocketSyncEx(_, false)(Sync[IO], MonadThrow[IO]))
     //   .handleErrorWith(error => Stream.eval(IO.println(s"Error: $error")))
     .attempt.evalMap {
       case Left(error) => IO.println(s"Nach attempt: Left Error: $error")
@@ -112,14 +115,14 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
   val release = (conn: Int) =>
     IO.println(s"Releasing connection to the database: $conn")
 
-  val stpwriteResSE = Stream.bracket(acquire )(release).flatMap(conn =>  stpwriteSE)
+  val writeResourceStreamAsyncEx = Stream.bracket(acquire )(release).flatMap(conn =>  writeStreamAsyncEx)
 
   test("run  Stream parEvalMapUnordered  chunkN ") {
-    runStream(stpwriteA)
+    runStream(writeStreamAsync)
   }
 
   test("2run  Stream parEvalMapUnordered  chunkN ") {
-    runStream(stpwriteResSE)
+    runStream(writeResourceStreamAsyncEx)
   }
 
 
