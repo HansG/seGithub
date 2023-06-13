@@ -85,7 +85,8 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
         rn
       }
     }
-    if(handleEx) fa else  MonadThrow[F].handleErrorWith(fa)(e => Sync[F].delay(println(s"Exception $e")) >> Sync[F].delay(43) )
+    if(handleEx)  MonadThrow[F].handleErrorWith(fa)(e => Sync[F].delay(println(s"Exception $e")) >> Sync[F].delay(43) )
+    else fa
   }
 
 
@@ -115,6 +116,9 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
   val release = (conn: Int) =>
     IO.println(s"Releasing connection to the database: $conn")
 
+/*
+  vgl. https://blog.rockthejvm.com/fs2/
+*/
   val writeResourceStreamAsyncEx = Stream.bracket(acquire )(release).flatMap(conn =>  writeStreamAsyncEx)
 
   test("run  Stream parEvalMapUnordered  chunkN ") {
