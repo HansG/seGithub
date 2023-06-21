@@ -119,6 +119,7 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 /*
   vgl. https://blog.rockthejvm.com/fs2/
 */
+  //!!!bracket -> Resource im Stream-Kontext !!!!
   val writeResourceStreamAsyncEx = Stream.bracket(acquire )(release).flatMap(conn =>  writeStreamAsyncEx)
 
   test("run  Stream parEvalMapUnordered  chunkN ") {
@@ -129,6 +130,10 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
     runStream(writeResourceStreamAsyncEx)
   }
 
+  test("2run  Stream parEvalMapUnordered  chunkN ") {
+    val p = ("1", "2")
+    println(p.(1))
+  }
 
   //https://www.beyondthelines.net/programming/streaming-patterns-with-fs2/
   def writeToDatabase[F[_]: Async](chunk: Chunk[Int]): F[Unit] =
