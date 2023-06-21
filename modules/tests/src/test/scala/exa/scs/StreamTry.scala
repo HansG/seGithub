@@ -109,6 +109,60 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
       case Right(id) => IO.println(s"Nach attempt: Right: $id")
     }
 
+
+  /*
+    vgl. https://blog.rockthejvm.com/fs2/
+  */
+  case class Actor(id: Int, firstName: String, lastName: String)
+
+  val tomHolland = Actor(0, "Henry", "Cavill")
+  val henryCavil = tomHolland
+  val galGodot = Actor(1, "Gal", "Godot")
+  val ezraMiller = Actor(2, "Ezra", "Miller")
+  val benFisher = Actor(3, "Ben", "Fisher")
+  val rayHardy = Actor(4, "Ray", "Hardy")
+  val tomHollandStream: Stream[Pure, Actor] = Stream.emit(tomHolland)
+  val spiderMen: Stream[Pure, Actor] = Stream.emits(List(tomHolland, galGodot, ezraMiller))
+  val jlActors: Stream[Pure, Actor] = Stream(henryCavil, galGodot, ezraMiller, benFisher, rayHardy)
+  val liftedJlActors: Stream[IO, Actor] = jlActors.covary[IO]
+  val evalMappedJlActors: Stream[IO, Unit] = jlActors.evalMap(IO.println)
+  val evalTappedJlActors: Stream[IO, Actor] = jlActors.evalTap(IO.println)
+  val avengersActors: Stream[Pure, Actor] = Stream.chunk(Chunk.array(Array(tomHolland, galGodot, ezraMiller)))
+  val avengersActorsByFirstName: Stream[Pure, Map[String, List[Actor]]] = avengersActors.fold(Map.empty[String, List[Actor]]) { (map, actor) =>
+    map + (actor.firstName -> (actor :: map.getOrElse(actor.firstName, Nil)))
+  }
+  val dcAndMarvelSuperheroes: Stream[Pure, Actor] = jlActors ++ avengersActors
+
+  def jlActorStream[F[_] : MonadThrow]: Stream[F, Actor] = jlActors.covary[F]
+  val jlActorsEffectfulList: IO[List[Actor]] = liftedJlActors.compile.toList
+  def save(a:Actor) =  IO {
+    println(s"Saving actor $a");
+    Thread.sleep(1000);
+    println("Finished")
+    a.id
+  }
+  val savedJlActors: Stream[IO, Int] = jlActors.evalMap(save)
+  val savingTomHolland: Stream[IO, Unit] = Stream.eval {
+    save(tomHolland).void
+  }
+  savingTomHolland.compile.drain.unsafeRunSync() //import cats.effect.unsafe.implicits.global
+  //oder in IOApp .. def run..:
+  savingTomHolland.compile.drain.as(ExitCode.Success)
+  val fromActorToStringPipe: Pipe[IO, Actor, String] = in =>
+    in.map(actor => s"${actor.firstName} ${actor.lastName}")
+
+  def toConsole[T]: Pipe[IO, T, Unit] = in =>
+    in.evalMap(str => IO.println(str))
+
+  val stringNamesOfJlActors: Stream[IO, Unit] =
+    jlActors.through(fromActorToStringPipe).through(toConsole)
+
+  val attemptedSavedJlActors: Stream[IO, Either[Throwable, Int]] = savedJlActors.attempt
+  attemptedSavedJlActors.evalMap {
+    case Left(error) => IO.println(s"Error: $error")
+    case Right(id) => IO.println(s"Saved actor with id: $id")
+  }
+
   val acquire = IO {
     println(s"Acquiring connection to the database: 17")
     17
@@ -134,6 +188,27 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
     val p = ("1", "2")
     println(p.(1))
   }
+  val tomHollandActorPull: Pull[Pure, Actor, Unit] = Pull.output1(tomHolland)
+  val tomHollandActorStream: Stream[Pure, Actor] = tomHollandActorPull.stream //wenn R = Unit -> stream
+  val spiderMenActorPull: Pull[Pure, Actor, Unit] =
+    tomHollandActorPull >> Pull.output1(galGodot) >> Pull.output1(ezraMiller)
+  val avengersActorsPull: Pull[Pure, Actor, Unit] = avengersActors.pull.echo
+  val unconsAvengersActors: Pull[Pure, Nothing, Option[(Chunk[Actor], Stream[Pure, Actor])]] =
+    avengersActors.pull.uncons
+  val uncons1AvengersActors: Pull[Pure, Nothing, Option[(Actor, Stream[Pure, Actor])]] =
+    avengersActors.pull.uncons1
+
+  def takeByName(name: String): Pipe[IO, Actor, Actor] = {
+    def go(s: Stream[IO, Actor]): Pull[IO, Actor, Unit] =
+      s.pull.uncons1.flatMap {
+        case Some((hd, tl)) =>
+          if (hd.firstName == name) Pull.output1(hd) >> go(tl)
+          else go(tl)
+        case None => Pull.done
+      }
+    in => go(in).stream
+  }
+
 
   //https://www.beyondthelines.net/programming/streaming-patterns-with-fs2/
   def writeToDatabase[F[_]: Async](chunk: Chunk[Int]): F[Unit] =
