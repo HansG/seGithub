@@ -186,7 +186,7 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
   test("2run  Stream parEvalMapUnordered  chunkN ") {
     val p = ("1", "2")
-    println(p.(1))
+    println(p._1)
   }
   val tomHollandActorPull: Pull[Pure, Actor, Unit] = Pull.output1(tomHolland)
   val tomHollandActorStream: Stream[Pure, Actor] = tomHollandActorPull.stream //wenn R = Unit -> stream
@@ -208,6 +208,8 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
       }
     in => go(in).stream
   }
+
+
 
 
   //https://www.beyondthelines.net/programming/streaming-patterns-with-fs2/
