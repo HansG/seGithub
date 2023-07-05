@@ -12,6 +12,9 @@ import munit.{CatsEffectSuite, ScalaCheckEffectSuite}
 
 import scala.concurrent.duration.{DurationDouble, DurationInt}
 import cats.effect.std.Random
+import org.scalacheck._
+import org.scalacheck.rng.Seed
+import org.scalacheck.Prop.forAll
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalacheck.effect.PropF
 import shop.domain.order.PaymentId
@@ -55,8 +58,15 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
   test("first PropF test") {
     PropF.forAllF { (x: PaymentId) =>
-      IO(x).start.flatMap(_.join).map(res => {println(s"$x - $res"); () } )
+      IO(x).start.flatMap(_.join).map(res => {println(s"$x - ${res.}"); () } )
     }
+  }
+
+  test("with sees: reproduction of test data"){
+    propertyWithSeed("your property", Some("seed")) =
+      forAll { (xs: List[Int], f: Int => Int, g: Int => Int) =>
+        xs.map(f).map(g) == xs.map(f andThen g)
+      }
   }
 
 
