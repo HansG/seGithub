@@ -59,12 +59,12 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
   test("first PropF test") {
     PropF.forAllF { (x: PaymentId) =>
-      IO(x).start.flatMap(_.join).map(res => {println(s"$x - ${res.}"); () } )
+      IO(x).start.flatMap(_.join).map(res => {println(s"$x - ${res}"); () } )
     }
   }
 
   test("with sees: reproduction of test data"){
-    propertyWithSeed("your property", Some("seed")) =
+    property("your property") {//propertyWithSeed(, Some("seed")
       forAll { (xs: List[Int], f: Int => Int, g: Int => Int) =>
         xs.map(f).map(g) == xs.map(f andThen g)
       }
