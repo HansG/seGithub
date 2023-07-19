@@ -63,11 +63,12 @@ class StreamTry extends CatsEffectSuite with ScalaCheckEffectSuite {
     }
   }
 
-  test("with sees: reproduction of test data"){
-    property("your property") {//propertyWithSeed(, Some("seed")
+  test("with sees: reproduction of test data") {
+    property("your property") { //propertyWithSeed(, Some("seed")
       forAll { (xs: List[Int], f: Int => Int, g: Int => Int) =>
         xs.map(f).map(g) == xs.map(f andThen g)
       }
+    }
   }
 
 

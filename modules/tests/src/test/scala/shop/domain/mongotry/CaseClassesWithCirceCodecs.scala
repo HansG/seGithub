@@ -211,12 +211,12 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
     mongoClientRes.use { client =>
       for {
         db <- client.getDatabase("testdb")
-        coll <- db.createCollection("peopleG")
+    //    coll <- db.createCollection("peopleG")
         coll <- db.getCollectionWithCodec[PersonEntry]("peopleG")
           persons = 1.to(3).map(i => PersonEntry("Egon"*i, "Keil" +i+"berg"))
           personGs = 1.to(3).map(i => PersonEntry("Bibi"*i, "Bloggs" +i+"berg", Some(-10.0 + 10*i)))
           infos = 1.to(3).map(i => Info("Schitt Fehler"))
-        _    <- coll.insertMany(persons ++ personGs ++ infos)
+   //     _    <- coll.insertMany(persons ++ personGs ++ infos)
         somePers <- coll.find.filter(Filter.gt("balance", 10.0)).all
         _    <- IO.println(somePers)
         allPers <- coll.find.stream.compile.toList
