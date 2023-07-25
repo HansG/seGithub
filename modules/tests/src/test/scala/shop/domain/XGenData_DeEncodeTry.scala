@@ -109,7 +109,7 @@ object XCheckValueDeEncodeTry {
   //  Gen.buildableOfN[List[WordPred], WordPred](n, stringGent.map(Refined.unsafeApply(_)))
 
   //todo -> 2022XX   arbitrary ... Testserver mit Mockdaten hinschicken/abholen
-  //für datenbank (de)serialisieren  client/json (de)serialisieren   eigenes Protokoll mit ODER/UND (de)serialisieren
+  //für datenbank (de)serialisieren  client/json (de)serialisieren  eigenes Protokoll mit ODER/UND (de)serialisieren
 
   // Summe-Gen
 

@@ -72,11 +72,11 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
  // @derive(decoder, encoder,  show)
   case class Address(city: String, country: String)
 
-  implicit def decoderOf[T, P](implicit v: Validate[T, P], d: Decoder[T]): Decoder[T Refined P] =
-    d.emap(refineV[P].apply[T](_))
+  implicit def decoderOf[T, P](implicit v: Validate[T, P], dt: Decoder[T]): Decoder[T Refined P] =
+    dt.emap(refineV[P].apply[T](_))
 
-  implicit def encoderOf[T, P](implicit d: Encoder[T]): Encoder[T Refined P] =
-    d.contramap(_.value)
+  implicit def encoderOf[T, P](implicit et: Encoder[T]): Encoder[T Refined P] =
+    et.contramap(_.value)
 
   implicit def showOf[T, P](implicit d: Show[T]): Show[T Refined P] =
     Show.show((rtp: T Refined P) => d.show(rtp.value))
@@ -168,7 +168,7 @@ class CaseClassesWithCirceCodecs extends CatsEffectSuite {
   def parseInstant(ops: => List[CursorOp])(d: String): Either[DecodingFailure, Instant] =
       Validated.fromTry(Try(Instant.parse(d))).leftMap(DecodingFailure.fromThrowable(_, ops)).toEither
 
-  val myInstantDecoder: Decoder[Instant] = (c: HCursor) =>c.as[String].flatMap(parseInstant(c.history))
+  val myInstantDecoder: Decoder[Instant] = (c: HCursor) => c.as[String].flatMap(parseInstant(c.history))
   //standard instantDecoder either myInstantDecoder
   implicit val eInstantDecoder: Decoder[Instant] =
     mongo4cats.circe.instantDecoder.either(myInstantDecoder).map(_.merge)
