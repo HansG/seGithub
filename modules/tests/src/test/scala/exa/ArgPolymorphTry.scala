@@ -1,5 +1,7 @@
 package exa
 
+
+//https://allaboutscala.com/tutorials/scala-exercises-solutions/
 object ArgPolymorphTry extends App {
 
   abstract class Vehicle(name: String)
