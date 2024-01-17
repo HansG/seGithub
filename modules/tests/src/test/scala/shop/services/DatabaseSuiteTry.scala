@@ -360,7 +360,8 @@ object StartPostgres extends App {
       host = "localhost",
       port = 5432,
       user = "postgres",
-      password = Some("postgres"),
+//      password = Some("postgres"),
+      password = Some("my-password"),
       database = "store"
     )
 

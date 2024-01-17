@@ -176,7 +176,7 @@ object MainX extends IOApp.Simple {
 
 
 
-//2022XX
+//§try 2022XX
    def runFst: IO[Unit] =
     ConfigX.dcfg.flatMap { cfg =>
       Logger[IO].info(s"Loaded config $cfg") >>
@@ -262,7 +262,7 @@ object BrandClientX {
 
       def processX(brandP : BrandName): IO[Brand] =
         Uri.fromString(cfg.uri.value + "/v1").liftTo[IO].flatMap { uri =>
-          client.run(   POST(brandP, uri/"brandsX")
+          client.run(   POST(brandP, uri/"brandsX")  //§trypost
           ).use { resp =>
             resp.status match {
               case Status.Created | Status.Conflict =>

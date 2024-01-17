@@ -31,7 +31,7 @@ object AdminRoutesSuite extends HttpSuite {
       b <- brandParamGen
     } yield (i, u, b)
 
-    forall(gen) {
+    forall(gen) { 
       case (id, user, brand) =>
         val req      = POST(brand, uri"/brands")
         val routes   = AdminBrandRoutes[IO](new TestBrands(id)).routes(authMiddleware(user))
