@@ -32,8 +32,8 @@ object PostgresSuite extends ResourceSuite {
       .pooled[IO](
         host = "localhost",
         port = 5432,
-        user = "postgres",
-        password = Some("my-password"),
+        user = "u",
+        password = Some("u"),
         database = "store",
         max = 10
       )

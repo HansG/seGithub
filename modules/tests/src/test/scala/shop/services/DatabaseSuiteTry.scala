@@ -240,7 +240,7 @@ class DatabaseSuiteTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
 
   test("single brand") {
-    findCreate2PG(singleSession, brandSample)
+    findCreate2PG(singleSession, brandSample.copy(uuid = BrandIdT(UUID.fromString("596d57fa-d3de-4ac8-8043-6e73f1271f9e")), name = BrandNameT("hello")))
   }
 
   test("single brand MG") {
@@ -248,59 +248,62 @@ class DatabaseSuiteTry extends CatsEffectSuite with ScalaCheckEffectSuite {
     findCreate2MG(mongoClientRes, brandSample)
   }
 
+  import UserTry._
 
-
-  test("list brand") {
-    brandSampleList.traverse(br => findCreate2PG(singleSession, br))
-  }
-
-  test("list brand") {
-    PropF.forAllF(brandGen) { brand =>
-      //   forAll(brandTGen) { brand =>
-      findCreate2PG(singleSession, brand).as(())
+  test("findUser") {
+    singleSession.use {
+      findAllUserS
     }
   }
 
-  //res.unsafeRunSync()
-  //gen zu stream + parMap mit pooledSessions
 
+  /*
 
+    test("list brand") {
+      brandSampleList.traverse(br => findCreate2PG(singleSession, br))
+    }
 
-    import UserTry._
-
-    test("findUser") {
-      StartPostgres.singleSession.use {
-        findAllUserS
+    test("list brand") {
+      PropF.forAllF(brandGen) { brand =>
+        //   forAll(brandTGen) { brand =>
+        findCreate2PG(singleSession, brand).as(())
       }
     }
 
-    test("single Session") {
-      StartPostgres.singleSession.use(
-        s =>
-          List(("Ha", "aH"), ("Sa", "aS"), ("Mo", "om"), ("Ad", "da"))
-            .traverse((vn) => UserTry.insertEtFindS(s, vn._1, vn._2).flatTap(n => IO.println(s"Gefnden mit id $n")))
-      )
-      //    UserTry.test(singleSession, "Ha", "aH") .as(ExitCode.Success)
-      //    UserTry.test(singleSession, "Sa", "aS") .as(ExitCode.Success)
-      //    UserTry.test(singleSession, "Mo", "om") .as(ExitCode.Success)
-      //    UserTry.test(singleSession, "Ad", "da") .as(ExitCode.Success)
-    }
+    //res.unsafeRunSync()
+    //gen zu stream + parMap mit pooledSessions
 
-    test("single SessionRes") {
-      List(("Ha", "aH"), ("Sa", "aS"), ("Mo", "om"), ("Ad", "da"))
-        .traverse((vn) => UserTry.insertEtFind(StartPostgres.singleSession, vn._1, vn._2))
-      //    UserTry.test(singleSession, "Ha", "aH") .as(ExitCode.Success)
-      //    UserTry.test(singleSession, "Sa", "aS") .as(ExitCode.Success)
-      //    UserTry.test(singleSession, "Mo", "om") .as(ExitCode.Success)
-      //    UserTry.test(singleSession, "Ad", "da") .as(ExitCode.Success)
-    }
 
-    test("SessionPool") {
-      StartPostgres.pooledSessions.use { resS =>
+
+
+      test("single Session") {
+        StartPostgres.singleSession.use(
+          s =>
+            List(("Ha", "aH"), ("Sa", "aS"), ("Mo", "om"), ("Ad", "da"))
+              .traverse((vn) => UserTry.insertEtFindS(s, vn._1, vn._2).flatTap(n => IO.println(s"Gefnden mit id $n")))
+        )
+        //    UserTry.test(singleSession, "Ha", "aH") .as(ExitCode.Success)
+        //    UserTry.test(singleSession, "Sa", "aS") .as(ExitCode.Success)
+        //    UserTry.test(singleSession, "Mo", "om") .as(ExitCode.Success)
+        //    UserTry.test(singleSession, "Ad", "da") .as(ExitCode.Success)
+      }
+
+      test("single SessionRes") {
         List(("Ha", "aH"), ("Sa", "aS"), ("Mo", "om"), ("Ad", "da"))
-          .traverse((vn) => UserTry.insertEtFind(resS, vn._1, vn._2))
+          .traverse((vn) => UserTry.insertEtFind(StartPostgres.singleSession, vn._1, vn._2))
+        //    UserTry.test(singleSession, "Ha", "aH") .as(ExitCode.Success)
+        //    UserTry.test(singleSession, "Sa", "aS") .as(ExitCode.Success)
+        //    UserTry.test(singleSession, "Mo", "om") .as(ExitCode.Success)
+        //    UserTry.test(singleSession, "Ad", "da") .as(ExitCode.Success)
       }
-    }
+
+      test("SessionPool") {
+        StartPostgres.pooledSessions.use { resS =>
+          List(("Ha", "aH"), ("Sa", "aS"), ("Mo", "om"), ("Ad", "da"))
+            .traverse((vn) => UserTry.insertEtFind(resS, vn._1, vn._2))
+        }
+      }
+    */
     /*
     https://stackoverflow.com/questions/60438969/postgresql-npgsql-returning-42601-syntax-error-at-or-near-1
     using (Npgsql.NpgsqlConnection conn = new Npgsql.NpgsqlConnection(DBManager.GetConnectionString()))
@@ -350,7 +353,7 @@ object StartPostgres extends App {
       host = "localhost",
       port = 5432,
       user = "postgres",
-      password = Some("postgres"),
+      password = Some("u"),
       database = "store",
       max = 10
     )
@@ -360,8 +363,7 @@ object StartPostgres extends App {
       host = "localhost",
       port = 5432,
       user = "postgres",
-//      password = Some("postgres"),
-      password = Some("my-password"),
+      password = Some("u"),
       database = "store"
     )
 
