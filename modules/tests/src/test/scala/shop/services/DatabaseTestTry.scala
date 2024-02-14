@@ -42,11 +42,11 @@ class DatabaseTestTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
 
   test("single brand") {
-    findCreate2PG(singleSession, brandSample)
+    findCreate2PG(singleSession, BrandT(brandIdGen.sample.get,  BrandNameT("PPSampleXXX")))
   }
 
   test("single brand MG") {
-    val brand = BrandT(BrandIdT(UUID.randomUUID()), BrandNameT("Daserw"))
+    val brand = BrandT(BrandIdT(new UUID(54322L, 12345L)), BrandNameT("Daserwx"))
     findCreate2MG(mongoClientRes, brandSample)
   }
 
