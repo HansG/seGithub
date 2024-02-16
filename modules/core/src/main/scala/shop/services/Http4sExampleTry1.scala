@@ -21,9 +21,8 @@ import org.http4s.dsl.Http4sDsl
 import skunk.codec.text.{bpchar, varchar}
 import skunk.implicits._
 import skunk.{Fragment, Query, Session, Void}
-import shop.services.Http4sExample
 
-object Http4sExampleTry1  extends IOApp {
+object Http4sExampleTry1 extends IOApp {
 
   /** A data model with a Circe `Encoder` */
   case class Country(code: String, name: String)
@@ -31,7 +30,6 @@ object Http4sExampleTry1  extends IOApp {
   object Country {
     implicit val encoderCountry: Encoder[Country] = deriveEncoder
   }
-
 
   /** A service interface and companion factory method. */
   trait CountryService[F[_]] {
@@ -50,9 +48,9 @@ object Http4sExampleTry1  extends IOApp {
     resSession.map { sess =>
       new CountryService[F] {
         def byCode(code: String): F[Option[Country]] =
-            sess.prepare(countryQuery(sql"WHERE code = ${bpchar(3)}")).flatMap { psByCode =>
-              psByCode.option(code)
-            }
+          sess.prepare(countryQuery(sql"WHERE code = ${bpchar(3)}")).flatMap { psByCode =>
+            psByCode.option(code)
+          }
 
         def all: F[Stream[F, Country]] =
           sess.prepare(countryQuery(Fragment.empty)).map { psAll =>
@@ -62,9 +60,9 @@ object Http4sExampleTry1  extends IOApp {
     }
   }
 
-
   /** Resource yielding a pool of `CountryService`, backed by a single `Blocker` and `SocketGroup`. */
-  def resResCountryService[F[_]: Concurrent: Network: Console: Trace: Temporal]: Resource[F, Resource[F, CountryService[F]]] =
+  def resResCountryService[F[_]: Concurrent: Network: Console: Trace: Temporal]
+      : Resource[F, Resource[F, CountryService[F]]] =
     Session
       .pooled[F](
         host = "localhost",
@@ -80,7 +78,7 @@ object Http4sExampleTry1  extends IOApp {
 
   /** Given a pool of `Countries` we can create an `HttpRoutes`. */
   def resRoutes[F[_]: Concurrent](
-                                   resService: Resource[F, CountryService[F]]
+      resService: Resource[F, CountryService[F]]
   ): Resource[F, HttpRoutes[F]] = {
     object dsl extends Http4sDsl[F];
     import dsl._
@@ -101,20 +99,17 @@ object Http4sExampleTry1  extends IOApp {
     }
   }
 
-
-
   /** Our application as a resource. */
   def resServer[F[_]: Async: Console: Trace]: Resource[F, Unit] =
     for {
-      rs    <- resResCountryService
+      rs     <- resResCountryService
       routes <- resRoutes(rs)
       app = Http4sExample.httpAppFrom(routes)
       _ <- Http4sExample.resServer(app)
     } yield ()
 
-
-    /** Main method instantiates `F` to `IO` and `use`s our resource forever. */
+  /** Main method instantiates `F` to `IO` and `use`s our resource forever. */
   def run(args: List[String]): IO[ExitCode] =
     resServer[IO].useForever
 
-  }
+}

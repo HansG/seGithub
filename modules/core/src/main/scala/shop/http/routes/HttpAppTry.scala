@@ -2,9 +2,9 @@ package shop.http.routes
 
 import cats.effect._
 import cats.syntax.all._
-import com.comcast.ip4s.{Host, IpLiteralSyntax, Port}
-import derevo.cats.{eqv, show}
-import derevo.circe.magnolia.{decoder, encoder}
+import com.comcast.ip4s.{ Host, IpLiteralSyntax, Port }
+import derevo.cats.{ eqv, show }
+import derevo.circe.magnolia.{ decoder, encoder }
 import derevo.derive
 import eu.timepit.refined.types.string.NonEmptyString
 import io.circe.syntax.EncoderOps
@@ -13,25 +13,25 @@ import monocle.Iso
 import org.http4s.Method._
 import org.http4s._
 import org.http4s.circe.CirceEntityCodec.circeEntityEncoder
-import org.http4s.circe.{JsonDecoder, toMessageSyntax}
+import org.http4s.circe.{ JsonDecoder, toMessageSyntax }
 import org.http4s.client.Client
 import org.http4s.client.dsl.Http4sClientDsl
 import org.http4s.dsl.Http4sDsl
 import org.http4s.implicits.http4sKleisliResponseSyntaxOptionT
-import org.http4s.server.middleware.{RequestLogger, ResponseLogger}
+import org.http4s.server.middleware.{ RequestLogger, ResponseLogger }
 import org.scalacheck.Gen
 import org.scalacheck.rng.Seed
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 import java.util.UUID
-import scala.concurrent.duration.{DurationInt, FiniteDuration}
-import cats.{Monad, MonadThrow}
+import scala.concurrent.duration.{ DurationInt, FiniteDuration }
+import cats.{ Monad, MonadThrow }
 import cats.data.Kleisli
 import cats.effect.kernel.Resource
 import org.http4s.ember.client.EmberClientBuilder
 import org.http4s.ember.server.EmberServerBuilder
-import org.http4s.server.{Router, Server}
+import org.http4s.server.{ Router, Server }
 import upickle.default
 import eu.timepit.refined.auto._
 import io.circe.Decoder
@@ -140,10 +140,10 @@ object HttAppTry extends IOApp.Simple {
     val port: Port = port"8080"
     val vers       = version.v1
     val pathPrefix = "/prods"
-    val uri : IO[Uri]
+    val uri: IO[Uri]
   }
 
-  object UriConfig extends UriConfigI{
+  object UriConfig extends UriConfigI {
 
     def apply(hostp: Host = host, portp: Port = port): IO[Uri] = {
       val uris = s"http://$host:$port"
@@ -155,8 +155,9 @@ object HttAppTry extends IOApp.Simple {
     override val uri: IO[Uri] = apply()
   }
 
-
-  override def run: IO[Unit] = HttpServerStart(UriConfig.host, UriConfig.port, UriConfig.vers, UriConfig.pathPrefix).startRoutes(ServiceAtHttpRoutes(AMockService.genMockService))
+  override def run: IO[Unit] =
+    HttpServerStart(UriConfig.host, UriConfig.port, UriConfig.vers, UriConfig.pathPrefix)
+      .startRoutes(ServiceAtHttpRoutes(AMockService.genMockService))
   // override def run: IO[Unit] = runFst
 
   /*object AppX extends IOApp {
@@ -167,15 +168,13 @@ object HttAppTry extends IOApp.Simple {
 
 }
 
-
-
 case class HttpServerStart(host: Host, port: Port, vers: String, pathPrefix: String) {
 
   def httpRoutesAtHttpApp(httpRoutes: HttpRoutes[IO]) = {
     val satrr: HttpRoutes[IO] = Router(pathPrefix -> httpRoutes)
-    val app = Router(vers -> satrr).orNotFound
+    val app                   = Router(vers -> satrr).orNotFound
 
-    def addLoggers[F[_] : Async](http: HttpApp[F]): HttpApp[F] = {
+    def addLoggers[F[_]: Async](http: HttpApp[F]): HttpApp[F] = {
       val httpReq = RequestLogger.httpApp(true, true)(http)
       ResponseLogger.httpApp(true, true)(httpReq)
     }
@@ -183,8 +182,7 @@ case class HttpServerStart(host: Host, port: Port, vers: String, pathPrefix: Str
     addLoggers(app)
   }
 
-
-  def httpAppAtServer[F[_] : Async](httpApp: HttpApp[F]) =
+  def httpAppAtServer[F[_]: Async](httpApp: HttpApp[F]) =
     EmberServerBuilder
       .default[F]
       .withHost(host)
@@ -197,15 +195,12 @@ case class HttpServerStart(host: Host, port: Port, vers: String, pathPrefix: Str
     server.useForever
   }
 
-
 }
-
-
 
 //Client ------------------------------------------------------
 
 object HttAppClientTry extends IOApp.Simple {
-  import HttAppTry.{UriConfigI, UriConfig, Domain }
+  import HttAppTry.{ Domain, UriConfig, UriConfigI }
   import Domain._
 
   trait ClientApi {
@@ -222,9 +217,7 @@ object HttAppClientTry extends IOApp.Simple {
     }
 
     def getProds: IO[List[Prod]] =
-      uriConfig.uri.flatMap {
-
-        uri =>
+      uriConfig.uri.flatMap { uri =>
         client.run(GET(uri)).use { resp =>
           resp.status match {
             case Status.Ok | Status.Conflict =>
@@ -252,8 +245,10 @@ object HttAppClientTry extends IOApp.Simple {
       }
   }
 
-
-  def newEmberClient[F[_]: Async](timeout: FiniteDuration = 60.seconds, idleTimeInPool: FiniteDuration = 30.seconds): Resource[F, Client[F]] =
+  def newEmberClient[F[_]: Async](
+      timeout: FiniteDuration = 60.seconds,
+      idleTimeInPool: FiniteDuration = 30.seconds
+  ): Resource[F, Client[F]] =
     EmberClientBuilder
       .default[F]
       .withTimeout(timeout)

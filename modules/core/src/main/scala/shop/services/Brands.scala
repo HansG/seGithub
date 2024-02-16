@@ -37,8 +37,8 @@ object Brands {
     }
 
   def makeMG[F[_]: GenUUID: MonadCancelThrow](
-                                               mg : F[GenericMongoDatabase[IO, Stream[F, *]]]
-                                           ): Brands[F] = ???
+      mg: F[GenericMongoDatabase[IO, Stream[F, *]]]
+  ): Brands[F] = ???
 }
 
 private object BrandSQL {

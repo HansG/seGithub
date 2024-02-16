@@ -15,25 +15,25 @@ import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
 import org.http4s.server.Server
 import org.http4s.HttpRoutes
-import skunk.codec.text.{bpchar, varchar}
+import skunk.codec.text.{ bpchar, varchar }
 import skunk.implicits._
-import skunk.{Fragment, Query, Session, Void}
+import skunk.{ Fragment, Query, Session, Void }
 import natchez.Trace
 import natchez.Trace.Implicits.noop
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import shop.services.Http4sExampleTry1.Country
 import shop.services.Http4sExample
+
 /**
   * A small but complete web service that serves data from the `world` database.
- * Note that the effect `F` is abstract throughout. So run this program and then try some requests:
+  * Note that the effect `F` is abstract throughout. So run this program and then try some requests:
   *
   *  curl -i http://localhost:8080/country/USA
   *  curl -i http://localhost:8080/country/foobar
   *
   */
-object Http4sExample2 extends  IOApp  {
-
+object Http4sExample2 extends IOApp {
 
   /** A service interface and companion factory method. */
   trait CountryService[F[_]] {
@@ -41,44 +41,47 @@ object Http4sExample2 extends  IOApp  {
     def all: F[Stream[F, Country]]
   }
 
-
   /** Given a `Session` we can create a `Countries` resource with pre-prepared statements. */
-  def countryServiceFrom[F[_]: Monad: MonadCancel[*[_], Throwable] : Logger](
+  def countryServiceFrom[F[_]: Monad: MonadCancel[*[_], Throwable]: Logger](
       resSession: Resource[F, Session[F]]
   ): CountryService[F] = {
 
     def countryQuery[A](where: Fragment[A]): Query[A, Country] =
       sql"SELECT code, name FROM country $where".query((bpchar(3) ~ varchar).gmap[Country])
 
-      new CountryService[F] {
-        def byCode(code: String): F[Option[Country]] =
-          resSession.use { sess =>
-            sess.prepare(countryQuery(sql"WHERE code = ${bpchar(3)}")).flatMap  { psByCode =>
+    new CountryService[F] {
+      def byCode(code: String): F[Option[Country]] =
+        resSession
+          .use { sess =>
+            sess.prepare(countryQuery(sql"WHERE code = ${bpchar(3)}")).flatMap { psByCode =>
               psByCode.option(code)
             }
-          }.onError {
+          }
+          .onError {
             case err =>
               //Logger[F].error(
-              Monad[F].pure(println(
-                s"Failed on: ${err.toString} \n ${err.getCause}"
-              ))
-          }
-
-        def all:  F[Stream[F, Country]] =
-          resSession.use { sess =>
-           sess.prepare(countryQuery(Fragment.empty)).flatMap { prepQ =>
-              Monad[F].pure( prepQ.stream(Void, 64)
+              Monad[F].pure(
+                println(
+                  s"Failed on: ${err.toString} \n ${err.getCause}"
+                )
               )
-            }
-          }.onError {
-            case ex:Exception  => Monad[F].pure(println(ex.toString))
-            case e => Monad[F].pure(println(e.toString))
           }
 
-      }
+      def all: F[Stream[F, Country]] =
+        resSession
+          .use { sess =>
+            sess.prepare(countryQuery(Fragment.empty)).flatMap { prepQ =>
+              Monad[F].pure(prepQ.stream(Void, 64))
+            }
+          }
+          .onError {
+            case ex: Exception => Monad[F].pure(println(ex.toString))
+            case e             => Monad[F].pure(println(e.toString))
+          }
+
+    }
   }
 
-  
   /** Resource yielding a pool of `CountryService`, backed by a single `Blocker` and `SocketGroup`. */
   def resResSession[F[_]: Concurrent: Network: Console: Trace: Temporal]: Resource[F, Resource[F, Session[F]]] =
     Session
@@ -95,32 +98,30 @@ object Http4sExample2 extends  IOApp  {
 
   /** Given a pool of `Countries` we can create an `HttpRoutes`. */
   def routesFrom[F[_]: Concurrent](
-                                   countries: CountryService[F]
+      countries: CountryService[F]
   ): HttpRoutes[F] = {
     object dsl extends Http4sDsl[F];
     import dsl._
-      HttpRoutes.of[F] {
-        case GET -> Root / "country" / code =>
-          countries.byCode(code).flatMap {
-            case Some(c) => Ok(c.asJson)
-            case None    => NotFound(s"No country has code $code.")
-          }
+    HttpRoutes.of[F] {
+      case GET -> Root / "country" / code =>
+        countries.byCode(code).flatMap {
+          case Some(c) => Ok(c.asJson)
+          case None    => NotFound(s"No country has code $code.")
+        }
 
-        case GET -> Root / "countries" =>
-          countries.all.flatMap { st =>
-            val stt = st.compile.toList.map(_.asJson)
-            Ok(stt)
-          }
-      }
+      case GET -> Root / "countries" =>
+        countries.all.flatMap { st =>
+          val stt = st.compile.toList.map(_.asJson)
+          Ok(stt)
+        }
+    }
   }
 
-
-
   /** Our application as a resource. */
-  def resServer[F[_]: Async: Console: Trace : Logger]: Resource[F, Server] =
+  def resServer[F[_]: Async: Console: Trace: Logger]: Resource[F, Server] =
     resResSession.map { rs =>
       val cs = countryServiceFrom(rs)
-      val r = routesFrom(cs)
+      val r  = routesFrom(cs)
       Http4sExample.httpAppFrom(r)
     } flatMap { app =>
       Http4sExample.resServer(app)

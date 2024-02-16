@@ -21,12 +21,13 @@ final case class AdminBrandRoutesTry0[F[_]: JsonDecoder: MonadThrow](
   private[admin] val prefixPath = "/brandsX"
 
   private val httpRoutes: HttpRoutes[F] =
-    HttpRoutes.of {  /*
+    HttpRoutes.of {
+      /*
     §try Aufruf: Uri.fromString(cfg.uri.value + "/v1").liftTo[IO].flatMap { uri =>
       client.run(   POST(brandParam/Name??, uri/"brandsX")    -> Server(hier):  req.asJsonDecode[A].attempt.flatMap
     einfacher (C:\se\prj\queue-server\src\main\scala\QueueServer.scala)
     case POST -> Root / "createQueue" / queueName =>  ...//Aufruf: Uri.fromString(s"http://$host:$port/createQueue/$queueName")  Request[IO](Method.POST, uri)
-     */
+       */
       case req @ POST -> Root =>
         req.decodeR[BrandName] { bp =>
           brands.create(bp).flatMap { id => //.toDomain
@@ -56,6 +57,6 @@ final case class AdminBrandRoutesTry0[F[_]: JsonDecoder: MonadThrow](
     <input id="file" name="file" type="file" />
     <button>Upload</button>
   </form>
-   */
+ */
 
 }
