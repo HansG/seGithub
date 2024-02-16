@@ -18,9 +18,9 @@ import natchez.Trace.Implicits.noop
 import org.http4s.HttpRoutes
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
-import skunk.codec.text.{bpchar, varchar}
+import skunk.codec.text.{ bpchar, varchar }
 import skunk.implicits._
-import skunk.{Fragment, Query, Session, Void}
+import skunk.{ Fragment, Query, Session, Void }
 
 object Http4sExampleTry1 extends IOApp {
 

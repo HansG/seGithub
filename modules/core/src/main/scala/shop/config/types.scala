@@ -70,6 +70,7 @@ object types {
       host: NonEmptyString,
       port: UserPortNumber,
       user: NonEmptyString,
+//      password: NonEmptyString,
       password: Secret[NonEmptyString],
       database: NonEmptyString,
       max: PosInt
