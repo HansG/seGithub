@@ -1,10 +1,12 @@
 package shop.http
 
 import cats.effect.{IO, Ref}
+import munit.{CatsEffectSuite, ScalaCheckEffectSuite}
 import cats.implicits._
 import cats.effect.implicits._
-import munit.{CatsEffectSuite, ScalaCheckEffectSuite}
-import org.http4s._
+import org.http4s.Status.Ok
+import org.http4s._, org.http4s.dsl.io._, org.http4s.implicits._
+import org.http4s.syntax._
 import org.http4s.client.Client
 
 
@@ -27,13 +29,13 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
   val useCounter = for {
     counter <- refCounter
-    v <- counter.increment.parReplicateA(2)
+    _       <- counter.increment.parReplicateA(2)
+    v       <- counter.get
   } yield v
 
 
   test("useCounter"){
-    useCounter.unsafeRunSync()
-
+    println(useCounter.unsafeRunSync())
   }
 
 
@@ -46,11 +48,26 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
   def routes(client: Client[IO]): HttpRoutes[IO] = HttpRoutes.of[IO] {
     case _ =>
-      val sr = refCounter.flatMap( counter =>
-        sampleRequest(withCount(client, counter))  )
-      sr.
+      refCounter.flatMap { counter =>
+        val countedClient = withCount(client, counter)
 
-      )
+        sampleRequest(countedClient) *> sampleRequest(countedClient) *>
+          counter.get.map(_.show).map(Response(Ok).withEntity(_))
+      }
+  }
+
+  def testRoute(route: Client[IO] => IO[HttpRoutes[IO]]): IO[List[String]] = {
+    // our fake client, which simply succeeds
+    val c = Client.fromHttpApp[IO](HttpApp.pure(Response()))
+
+    route(c).flatMap { handler =>
+      val runAndGetBody = handler.orNotFound.run(Request())
+
+
+
+
+    }
+
 
 
   }
