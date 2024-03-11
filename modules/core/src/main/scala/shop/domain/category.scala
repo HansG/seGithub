@@ -1,9 +1,9 @@
 package shop.domain
 
 import java.util.UUID
-import shop.optics.{IsUUID, uuid}
+import shop.optics.{ IsUUID, uuid }
 import derevo.cats._
-import derevo.circe.magnolia.{decoder, encoder}
+import derevo.circe.magnolia.{ decoder, encoder }
 import derevo.derive
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.string.NonEmptyString
@@ -13,7 +13,7 @@ import io.estatico.newtype.macros.newtype
 import monocle.Iso
 
 object category {
-  @derive(decoder, encoder, eqv, show)//, uuid
+  @derive(decoder, encoder, eqv, show) //, uuid
   @newtype
   case class CategoryId(value: UUID)
 
@@ -22,8 +22,6 @@ object category {
       val _UUID = Iso[UUID, CategoryId](CategoryId(_))(_.value)
     }
   }
-
-
   @derive(decoder, encoder, eqv, show)
   @newtype
   case class CategoryName(value: String)

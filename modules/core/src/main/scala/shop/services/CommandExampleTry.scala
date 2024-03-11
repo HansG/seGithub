@@ -2,14 +2,21 @@ package shop.services
 
 import cats.effect._
 import cats.effect.std.Console
-import cats.implicits.{catsSyntaxApplicativeError, catsSyntaxApply, toFlatMapOps, toFoldableOps, toFunctorOps, toTraverseOps}
-import cats.{Applicative, Monad}
+import cats.implicits.{
+  catsSyntaxApplicativeError,
+  catsSyntaxApply,
+  toFlatMapOps,
+  toFoldableOps,
+  toFunctorOps,
+  toTraverseOps
+}
+import cats.{ Applicative, Monad }
 import fs2.Stream
-import munit.{CatsEffectSuite, ScalaCheckEffectSuite}
+import munit.{ CatsEffectSuite, ScalaCheckEffectSuite }
 import natchez.Trace.Implicits.noop
 import skunk.codec.all._
 import skunk.implicits.toStringOps
-import skunk.{Command, Query, Session, SqlState, Void}
+import skunk.{ Command, Query, Session, SqlState, Void }
 
 import java.time.OffsetDateTime
 
