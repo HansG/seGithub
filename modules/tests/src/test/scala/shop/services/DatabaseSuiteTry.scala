@@ -240,7 +240,7 @@ class DatabaseSuiteTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
 
   test("single brand") {
-    findCreate2PG(singleSession, brandSample.copy(uuid = BrandIdT(UUID.fromString("596d57fa-d3de-4ac8-8043-6e73f1271f9e")), name = BrandNameT("hello")))
+    findCreate2PG(singleSession, brandSample.copy(uuid = BrandIdT(UUID.fromString("596d57fa-d3de-4ac8-8043-6e73f1271f9e")), name = BrandNameT("hollaI")))
   }
 
   test("single brand MG") {
@@ -360,10 +360,12 @@ object StartPostgres extends App {
 
   lazy val singleSession: Res =
     Session.single[IO](
+      //      host = "172.18.0.3",
       host = "localhost",
       port = 5432,
       user = "postgres",
-      password = Some("u"),
+      password = Some("postgres"),
+//      password = Some("u"),
       database = "store"
     )
 

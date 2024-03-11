@@ -12,6 +12,7 @@ import brandTestGen._
 import cats.implicits.{toFlatMapOps, toTraverseOps}
 import mongo4cats.client.MongoClient
 import org.scalacheck.effect.PropF
+import shop.services.brandPG.selectAll
 
 import java.util.UUID
 
@@ -28,21 +29,28 @@ class DatabaseTestTry extends CatsEffectSuite with ScalaCheckEffectSuite {
   }
 
   def findCreate2ByAlg(res: Resource[IO, BrandsT[IO]], brand: BrandT): IO[Unit] =
-    res.use { bs =>
-      for {
-        x <- bs.findAll
-        _ <- bs.create(brand.name)
-        y <- bs.findAll
-        z <- bs.create(brand.name).attempt
-      } yield println(
-        x.toString() + "\n" + (y.count(_.name == brand.name) == 1) + "\n" + (z
-          .fold(_.printStackTrace(), "Neu: " + _.toString))
-      )
+    res.use {
+      findCreateUsingService(_, brand)
     }
 
+  def findCreateUsingService(bs : BrandsT[IO], brand: BrandT) = {
+    for {
+      x <- bs.findAll
+      _ <- bs.create(brand.name)
+      y <- bs.findAll
+      z <- bs.create(brand.name).attempt
+    } yield println(
+      x.toString() + "\n" + (y.count(_.name == brand.name) == 1) + "\n" + (z
+        .fold(_.printStackTrace(), "Neu: " + _.toString))
+    )
+  }
 
   test("single brand") {
     findCreate2PG(singleSession, brandSample)
+  }
+
+  test("list brand simple") {
+    singleSession.use(s => s.execute(selectAll).flatTap(li => IO(println(li))))
   }
 
   test("single brand MG") {
@@ -53,6 +61,11 @@ class DatabaseTestTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
   test("list brand") {
     brandSampleList.traverse(br => findCreate2PG(singleSession, br))
+  }
+
+  test("list brand using Service") {
+    val brandsRes = singleSession.map(BrandsT.makePg(_))//.flatTap(withTempTable)
+    brandsRes.use( bs =>  brandSampleList.traverse(br => findCreateUsingService(bs, br)) )
   }
 
   test("list brand") {
