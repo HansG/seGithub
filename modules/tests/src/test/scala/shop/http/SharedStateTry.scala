@@ -22,7 +22,8 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
     val get: IO[Int]        = retrieve
   }
 
-  val refCounter: IO[Counter] = Ref[IO].of(0).map(ref => makeCounter(ref.update(_ + 1), ref.get))
+  val refCounter: IO[Counter] =
+    Ref[IO].of(0).map(ref => makeCounter(ref.update(_ + 1), ref.get)).flatTap(c => IO(println("Neuer Counter " + c)))
 
   val useCounter = for {
     counter <- refCounter
@@ -41,10 +42,10 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
   }
 
   /** §§
-  Antwort einpacken t als EntityBody: Response(Status...).withEntity(t) (using EntityEncoder[F, T])
-  siehe @link testRoute
-   */
-  def routes(client: Client[IO]): HttpRoutes[IO] = HttpRoutes.of[IO] {
+  Antwort t  einpacken als EntityBody: Response(Status...).withEntity(t) (using EntityEncoder[F, T])
+   auspacken siehe @link testRoute
+    */
+  def routeToServerClient(client: Client[IO]): HttpRoutes[IO] = HttpRoutes.of[IO] {
     case _ =>
       refCounter.flatMap { counter =>
         val countedClient = withCount(client, counter)
@@ -55,27 +56,21 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
   }
 
   /** §§
-   * HttpRoutes[IO] testen ohne Server: httpRoutes.orNotFound.run(Request())
-   * Antwort auspacken:  Response[IO].flatMap(resp => resp.bodyText.compile.string)
-   */
-  def testRoute(route: Client[IO] => IO[HttpRoutes[IO]]): IO[List[String]] = {
+    * HttpRoutes[IO] testen ohne Server: httpRoutes.orNotFound.run(Request())
+    * Antwort auspacken:  Response[IO].flatMap(resp => resp.bodyText.compile.string)
+    */
+  def callRouteToServerClient(route: Client[IO] => IO[HttpRoutes[IO]]): IO[List[String]] = {
     // our fake client, which simply succeeds
-    val c = Client.fromHttpApp[IO](HttpApp.pure(Response()))
+    println("Neuer fake client")
+    val c = Client.fromHttpApp[IO](HttpApp.pure(Response(Ok).withEntity("HG")))
 
-    // build the route: the "IO" part will be useful later
     route(c).flatMap { handler =>
-      // run the route with a simple request and grab its body
-      val httpApp = handler
-        .orNotFound
-      val runAndGetBody = httpApp.run(Request()).flatMap(resp => resp.bodyText.compile.string)
+      val runIt         = handler.orNotFound.run(Request())
+      val runAndGetBody = runIt.flatMap(_.bodyText.compile.string).flatTap(s => IO(println(s)))
 
-      // Run the request 10 times in parallel
-      runAndGetBody
-        .parReplicateA(10)
+      runAndGetBody.replicateA(3)
     }
-  }
-  // validate results
-    .flatTap {
+  }.flatTap {
       case results => IO(println("results: " + results))
     }
     // validate results
@@ -84,8 +79,46 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
       case _                                   => IO(println("Failure!"))
     }
 
-  test("testRoute") {
-    testRoute(client => IO.pure(routes(client)))
+  test("clientCall") {
+    callRouteToServerClient(c => IO(routeToServerClient(c))).flatTap(
+      results =>
+        if (results.forall(_ == "2")) IO(println("Success!"))
+        else IO(println("Failure!"))
+    )
+  }
+
+  class UserService(sclient: Client[IO]) {
+    println("Neuer UserService")
+
+    private val counter: IO[Counter] = refCounter
+    val countedClient = counter.map { counter =>
+      withCount(sclient, counter)
+    }
+
+    /*
+    Liefert Anzahl der Aufrufe (nicht User)
+     */
+    def find(id: Int): IO[Option[String]] =
+      countedClient.flatMap { countedClient =>
+        sampleRequest(countedClient).flatMap(_ => counter.flatMap(c => c.get.map(i => Some(i.show))))
+      }
+  }
+
+  def routeToService(service: UserService): HttpRoutes[IO] = HttpRoutes.of[IO] {
+    case POST -> Root / "users" / id =>
+      service.find(id.toInt).map {
+        case None       => Response[IO](Ok).withEntity("None")
+        case Some(user) => Response[IO](Ok).withEntity(user)
+      }
+    case _ => NotFound()
+  }
+
+  test("routeToService") {
+    callRouteToServerClient(c => IO(new UserService(c)).map(routeToService(_))).flatTap(
+      results =>
+        if (results.forall(_ == "2")) IO(println("Success!"))
+        else IO(println("Failure!"))
+    )
   }
 
 }
