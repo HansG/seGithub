@@ -1,13 +1,16 @@
 package shop.http
 
-import cats.effect.{ IO, Ref }
-import munit.{ CatsEffectSuite, ScalaCheckEffectSuite }
+import cats.effect.{IO, Ref}
+import munit.{CatsEffectSuite, ScalaCheckEffectSuite}
 import cats.implicits._
 import cats.effect.implicits._
 import org.http4s.Status.Ok
-import org.http4s._, org.http4s.dsl.io._, org.http4s.implicits._
+import org.http4s._
+import org.http4s.dsl.io._
+import org.http4s.implicits._
 import org.http4s.syntax._
 import org.http4s.client.Client
+import skunk.syntax.id
 
 //https://blog.kubukoz.com/flavors-of-shared-state/
 class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
@@ -65,8 +68,9 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
     val c = Client.fromHttpApp[IO](HttpApp.pure(Response(Ok).withEntity("HG")))
 
     route(c).flatMap { handler =>
+      println("Neu: handler run")
       val runIt         = handler.orNotFound.run(Request())
-      val runAndGetBody = runIt.flatMap(_.bodyText.compile.string).flatTap(s => IO(println(s)))
+      val runAndGetBody = runIt.flatMap(_.bodyText.compile.string).flatTap(s => IO(println("runAndGetBody: "+s)))
 
       runAndGetBody.replicateA(3)
     }
@@ -92,25 +96,26 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
     private val counter: IO[Counter] = refCounter
     val countedClient = counter.map { counter =>
-      withCount(sclient, counter)
+      (withCount(sclient, counter), counter)
     }
 
     /*
     Liefert Anzahl der Aufrufe (nicht User)
      */
     def find(id: Int): IO[Option[String]] =
-      countedClient.flatMap { countedClient =>
-        sampleRequest(countedClient).flatMap(_ => counter.flatMap(c => c.get.map(i => Some(i.show))))
+      countedClient.flatMap {  countedClient_Count =>
+        sampleRequest(countedClient_Count._1).flatMap(_ => countedClient_Count._2.get.map(i => Some(i.show)))
       }
   }
 
   def routeToService(service: UserService): HttpRoutes[IO] = HttpRoutes.of[IO] {
-    case POST -> Root / "users" / id =>
-      service.find(id.toInt).map {
-        case None       => Response[IO](Ok).withEntity("None")
-        case Some(user) => Response[IO](Ok).withEntity(user)
+//    case POST -> Root / "users" / id =>
+    case _ =>
+      service.find(1).map {
+        case None       => println("service.find: "); Response[IO](Ok).withEntity("None")
+        case Some(user) => println("service.find: "); Response[IO](Ok).withEntity(user)
       }
-    case _ => NotFound()
+//    case _ => NotFound()
   }
 
   test("routeToService") {
