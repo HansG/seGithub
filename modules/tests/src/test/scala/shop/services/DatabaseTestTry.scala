@@ -19,7 +19,8 @@ import java.util.UUID
 class DatabaseTestTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
   def findCreate2PG(res: Res, brand: BrandT): IO[Unit] = {
-    val brandsRes = res.flatTap(withTempTable).map(BrandsT.makePg(_))
+//    val brandsRes = res.flatTap(withTempTable).map(BrandsT.makePg(_))
+    val brandsRes = res.map(BrandsT.makePg(_))
     findCreate2ByAlg(brandsRes, brand)
   }
 
@@ -46,7 +47,7 @@ class DatabaseTestTry extends CatsEffectSuite with ScalaCheckEffectSuite {
   }
 
   test("single brand") {
-    findCreate2PG(singleSession, BrandT(brandIdGen.sample.get,  BrandNameT("PPSampleXXX")))
+    findCreate2PG(singleSession, BrandT(brandIdGen.sample.get,  BrandNameT("PPSampleY")))
   }
 
   test("list brand simple") {

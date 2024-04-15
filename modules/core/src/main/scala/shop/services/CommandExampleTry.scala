@@ -2,27 +2,24 @@ package shop.services
 
 import cats.effect._
 import cats.effect.std.Console
-import cats.implicits.{
-  catsSyntaxApplicativeError,
-  catsSyntaxApply,
-  toFlatMapOps,
-  toFoldableOps,
-  toFunctorOps,
-  toTraverseOps
-}
-import cats.{ Applicative, Monad }
+import cats.implicits.{catsSyntaxApplicativeError, catsSyntaxApply, toFlatMapOps, toFoldableOps, toFunctorOps, toTraverseOps}
+import cats.{Applicative, Monad}
+import derevo.cats.{eqv, show}
+import derevo.circe.magnolia.{decoder, encoder}
+import derevo.derive
 import fs2.Stream
-import munit.{ CatsEffectSuite, ScalaCheckEffectSuite }
+import munit.{CatsEffectSuite, ScalaCheckEffectSuite}
 import natchez.Trace.Implicits.noop
 import skunk.codec.all._
 import skunk.implicits.toStringOps
-import skunk.{ Command, Query, Session, SqlState, Void }
+import skunk.{Command, Query, Session, SqlState, Void}
 
 import java.time.OffsetDateTime
 
 //https://tpolecat.github.io/skunk/tutorial/Command.html
 class CommandExampleTry extends CatsEffectSuite with ScalaCheckEffectSuite {
   // a data type
+  @derive(decoder, encoder, eqv, show) //, uuid
   case class Pet(name: String, age: Short)
 
   // a service interface
@@ -37,10 +34,11 @@ class CommandExampleTry extends CatsEffectSuite with ScalaCheckEffectSuite {
   object PetService {
 
     // command to insert a pet
-    private val insertOne: Command[Pet] =
-      sql"INSERT INTO pets VALUES ($varchar, $int2)".command
-        .gcontramap[Pet]
-
+    private val insertOne: Command[Pet] = { 
+    val enc = (varchar ~ int2).gcontramap[Pet]
+    sql"INSERT INTO pets VALUES $enc".command
+//    sql"INSERT INTO pets VALUES ($varchar, $int2)".command.gcontramap[Pet]
+  }
     // command to insert a specific list of pets
     private def insertMany(ps: List[Pet]): Command[ps.type] = {
       val enc = (varchar ~ int2).gcontramap[Pet].values.list(ps)
@@ -70,8 +68,8 @@ class CommandExampleTry extends CatsEffectSuite with ScalaCheckEffectSuite {
                   _ <- pc.execute(p).recoverWith {
                     case SqlState.UniqueViolation(ex) =>
                       Console[F]
-                        .println(s"Unique violation: ${ex.constraintName.getOrElse("<unknown>")}, rolling back...") *>
-                        xa.rollback(sp)
+                        .println(s"Unique violation: ${ex.constraintName.getOrElse("<unknown>")}, rolling back...").flatMap(_ => xa.rollback(sp))
+                        
                   }
                 } yield ()
               }

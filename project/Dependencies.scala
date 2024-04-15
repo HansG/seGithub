@@ -10,14 +10,14 @@ object Dependencies {
     val ciris         = "2.3.2"
     val derevo        = "0.13.0"
     val javaxCrypto   = "1.0.1"
-    val fs2           = "3.5.0"
+    val fs2           = "3.9.4"
     val http4s        = "0.23.1"
     val http4sJwtAuth = "1.0.0"
     val log4cats      = "2.3.1"
     val monocle       = "3.1.0"
     val newtype       = "0.4.4"
-    val refined       = "0.9.29"
-    val redis4cats    = "1.1.1"
+    val refined       = "0.11.0"
+    val redis4cats    = "1.5.2"
     val skunk         = "0.5.1"
     val squants       = "1.8.3"
 
@@ -27,7 +27,7 @@ object Dependencies {
     val organizeImports  = "0.6.0"
     val semanticDB       = "4.5.8"
 
-    val weaver = "0.7.12"
+    val weaver = "0.8.3"
   }
 
   object Libraries {
@@ -35,12 +35,13 @@ object Dependencies {
     def ciris(artifact: String): ModuleID  = "is.cir"     %% artifact            % "2.3.2" //V.ciris
     def derevo(artifact: String): ModuleID = "tf.tofu"    %% s"derevo-$artifact" %  "0.13.0"//V.derevo
     def http4s(artifact: String): ModuleID = "org.http4s" %% s"http4s-$artifact" % "0.23.1"  //V.http4s
+    val http4s1 : ModuleID = "org.http4s" %% "http4s-dsl" % "0.23.1"  //V.http4s
 
-    val cats       = "org.typelevel"    %% "cats-core"   %  "2.9.0" //V.cats
+    val cats       = "org.typelevel"    %% "cats-core"   %  "2.10.0" //V.cats
     val catsEffect = "org.typelevel"    %% "cats-effect" %  "3.4.6" //V.catsEffect
     val catsRetry  = "com.github.cb372" %% "cats-retry"  %   "3.1.0"//V.catsRetry
     val squants    = "org.typelevel"    %% "squants"     %   "1.8.3"  //V.squants
-    val fs2        = "co.fs2"           %% "fs2-core"    % "3.5.0" //  V.fs2
+    val fs2        = "co.fs2"           %% "fs2-core"    % "3.9.4" //  V.fs2
     val fs2io        = "co.fs2"           %% "fs2-io"    % V.fs2
 
     val circeCore    = circe("core")
@@ -65,19 +66,19 @@ object Dependencies {
 
     val monocleCore = "dev.optics" %% "monocle-core" % V.monocle
 
-    val refinedCore = "eu.timepit" %% "refined"      % V.refined
+    val refinedCore = "eu.timepit" %% "refined"      % "0.11.0"
     val refinedCats = "eu.timepit" %% "refined-cats" % V.refined
 
     val log4cats = "org.typelevel" %% "log4cats-slf4j" % V.log4cats
-    val newtype  = "io.estatico"   %% "newtype"        % V.newtype
+    val newtype  = "io.estatico"   %% "newtype"        % "0.4.4"//V.newtype
 
     val javaxCrypto = "javax.xml.crypto" % "jsr105-api" % V.javaxCrypto
 
-    val redis4catsEffects  = "dev.profunktor" %% "redis4cats-effects"  % V.redis4cats
+    val redis4catsEffects  = "dev.profunktor" %% "redis4cats-effects"  % "1.5.2"
     val redis4catsLog4cats = "dev.profunktor" %% "redis4cats-log4cats" % V.redis4cats
 
-    val skunkCore  = "org.tpolecat" %% "skunk-core"  %  "0.5.1" //  V.skunk
-    val skunkCirce = "org.tpolecat" %% "skunk-circe" % "0.5.1" //  V.skunk
+    val skunkCore  = "org.tpolecat" %% "skunk-core"  %  "0.6.3" //  V.skunk
+    val skunkCirce = "org.tpolecat" %% "skunk-circe" % "0.6.3" //  V.skunk
 
     // Runtime
     val logback = "ch.qos.logback" % "logback-classic" % V.logback
@@ -87,7 +88,7 @@ object Dependencies {
     val log4catsNoOp      = "org.typelevel"       %% "log4cats-noop"      % V.log4cats
     val monocleLaw        = "dev.optics"          %% "monocle-law"        % V.monocle
     val refinedScalacheck = "eu.timepit"          %% "refined-scalacheck" % V.refined
-    val weaverCats        = "com.disneystreaming" %% "weaver-cats"        % V.weaver
+    val weaverCats        = "com.disneystreaming" %% "weaver-cats"        % "0.8.3"
     val weaverDiscipline  = "com.disneystreaming" %% "weaver-discipline"  % V.weaver
     val weaverScalaCheck  = "com.disneystreaming" %% "weaver-scalacheck"  % V.weaver
 
