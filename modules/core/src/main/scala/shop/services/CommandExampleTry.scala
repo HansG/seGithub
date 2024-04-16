@@ -10,6 +10,7 @@ import derevo.derive
 import fs2.Stream
 import munit.{CatsEffectSuite, ScalaCheckEffectSuite}
 import natchez.Trace.Implicits.noop
+import scodec.compat.{EmptyTuple, TupleOps}
 import skunk.codec.all._
 import skunk.implicits.toStringOps
 import skunk.{Command, Query, Session, SqlState, Void}
@@ -35,13 +36,13 @@ class CommandExampleTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
     // command to insert a pet
     private val insertOne: Command[Pet] = { 
-    val enc = (varchar ~ int2).gcontramap[Pet]
+    val enc = (varchar *: int2).to[Pet]
     sql"INSERT INTO pets VALUES $enc".command
 //    sql"INSERT INTO pets VALUES ($varchar, $int2)".command.gcontramap[Pet]
   }
     // command to insert a specific list of pets
     private def insertMany(ps: List[Pet]): Command[ps.type] = {
-      val enc = (varchar ~ int2).gcontramap[Pet].values.list(ps)
+      val enc = (varchar *: int2).to[Pet].values.list(ps)
       sql"INSERT INTO pets VALUES $enc".command
     }
 

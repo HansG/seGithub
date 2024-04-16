@@ -87,7 +87,7 @@ private object OrderSQL {
         WHERE user_id = $userId
        """.query(decoder)
 
-  val selectByUserIdAndOrderId: Query[UserId ~ OrderId, Order] =
+  val selectByUserIdAndOrderId: Query[UserId *: OrderId  *: EmptyTuple, Order] =
     sql"""
         SELECT * FROM orders
         WHERE user_id = $userId

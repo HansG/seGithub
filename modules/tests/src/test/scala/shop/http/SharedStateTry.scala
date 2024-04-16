@@ -196,6 +196,14 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
           c.get.map(_.show).map(Response().withEntity(_))
     }
 
+  def routeExClientLocalBase1(client: Client[IO], c: Counter): HttpRoutes[IO] = HttpRoutes.of[IO] {
+    case _ =>
+      (
+        sampleRequest(client) &>
+          sampleRequest(client)
+        ) *> c.get.map(_.show).map(Response().withEntity(_))
+  }
+
 
     val ioRoute = IOLocal(0).map { local =>
       val c = makeCounter(local.update(_ + 1), local.get)
