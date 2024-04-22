@@ -49,8 +49,8 @@ class CommandExampleTry extends CatsEffectSuite with ScalaCheckEffectSuite {
     // query to select all pets
     private val all: Query[Void, Pet] =
       sql"SELECT name, age FROM pets"
-        .query(varchar ~ int2)
-        .gmap[Pet]
+        .query(varchar *: int2)
+        .to[Pet]
 
     // construct a PetService, preparing our statement once on construction
     def fromSession[F[_]: Monad: MonadCancelThrow: Console](s: Session[F]): F[PetService[F]] =
@@ -187,8 +187,8 @@ class CommandExampleTry extends CatsEffectSuite with ScalaCheckEffectSuite {
         FROM   country
         WHERE  name like $text
       """
-        .query(varchar ~ bpchar(3) ~ int4)
-        .gmap[Country]
+        .query(varchar *: bpchar(3) *: int4)
+        .to[Country]
 
     def fromSession[F[_]: Applicative](s: Session[F]): F[Service[F]] =
       s.prepare(countries).map { pq =>

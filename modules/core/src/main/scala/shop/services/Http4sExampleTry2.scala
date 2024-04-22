@@ -47,7 +47,7 @@ object Http4sExample2 extends IOApp {
   ): CountryService[F] = {
 
     def countryQuery[A](where: Fragment[A]): Query[A, Country] =
-      sql"SELECT code, name FROM country $where".query((bpchar(3) ~ varchar).gmap[Country])
+      sql"SELECT code, name FROM country $where".query((bpchar(3) *: varchar).to[Country])
 
     new CountryService[F] {
       def byCode(code: String): F[Option[Country]] =
@@ -118,7 +118,7 @@ object Http4sExample2 extends IOApp {
   }
 
   /** Our application as a resource. */
-  def resServer[F[_]: Async: Console: Trace: Logger]: Resource[F, Server] =
+  def resServer[F[_]: Async: Network: Console: Trace: Logger]: Resource[F, Server] =
     resResSession.map { rs =>
       val cs = countryServiceFrom(rs)
       val r  = routesFrom(cs)

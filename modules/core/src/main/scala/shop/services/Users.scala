@@ -27,7 +27,7 @@ object Users {
         postgres.use { session =>
           session.prepare(selectUser).flatMap { q =>
             q.option(username).map {
-              case Some(u ~ p) => UserWithPassword(u.id, u.name, p).some
+              case Some(u *: p) => UserWithPassword(u.id, u.name, p).some
               case _           => none[UserWithPassword]
             }
           }
@@ -38,7 +38,7 @@ object Users {
           session.prepare(insertUser).flatMap { cmd =>
             ID.make[F, UserId].flatMap { id =>
               cmd
-                .execute(User(id, username) ~ password)
+                .execute(User(id, username) *: password)
                 .as(id)
                 .recoverWith {
                   case SqlState.UniqueViolation(_) =>
@@ -53,22 +53,22 @@ object Users {
 
 private object UserSQL {
 
-  val codec: Codec[User ~ EncryptedPassword] =
-    (userId ~ userName ~ encPassword).imap {
-      case i ~ n ~ p =>
-        User(i, n) ~ p
+  val codec: Codec[User *: EncryptedPassword] =
+    (userId *: userName *: encPassword).imap {
+      case i *: n *: p =>
+        User(i, n) *: p
     } {
-      case u ~ p =>
-        u.id ~ u.name ~ p
+      case u *: p =>
+        u.id *: u.name *: p
     }
 
-  val selectUser: Query[UserName, User ~ EncryptedPassword] =
+  val selectUser: Query[UserName, User *: EncryptedPassword] =
     sql"""
         SELECT * FROM users
         WHERE name = $userName
        """.query(codec)
 
-  val insertUser: Command[User ~ EncryptedPassword] =
+  val insertUser: Command[User *: EncryptedPassword] =
     sql"""
         INSERT INTO users
         VALUES ($codec)

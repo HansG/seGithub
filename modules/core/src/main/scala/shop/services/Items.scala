@@ -6,10 +6,9 @@ import shop.domain.category._
 import shop.domain.item._
 import shop.effects.GenUUID
 import shop.sql.codecs._
-
 import cats.effect._
 import cats.syntax.all._
-import skunk._
+import skunk.{*:, _}
 import skunk.implicits._
 
 trait Items[F[_]] {
@@ -49,7 +48,7 @@ object Items {
         postgres.use { session =>
           session.prepare(insertItem).flatMap { cmd =>
             ID.make[F, ItemId].flatMap { id =>
-              cmd.execute(id ~ item).as(id)
+              cmd.execute(id, item).as(id)
             }
           }
         }
@@ -67,8 +66,8 @@ object Items {
 private object ItemSQL {
 
   val decoder: Decoder[Item] =
-    (itemId ~ itemName ~ itemDesc ~ money ~ brandId ~ brandName ~ categoryId ~ categoryName).map {
-      case i ~ n ~ d ~ p ~ bi ~ bn ~ ci ~ cn =>
+    (itemId *: itemName *: itemDesc *: money *: brandId *: brandName *: categoryId *: categoryName *: EmptyTuple).map {
+      case i *: n *: d *: p *: bi *: bn *: ci *: cn  *: EmptyTuple=>
         Item(i, n, d, p, Brand(bi, bn), Category(ci, cn))
     }
 
@@ -98,20 +97,20 @@ private object ItemSQL {
         WHERE i.uuid = $itemId
        """.query(decoder)
 
-  val insertItem: Command[ItemId ~ CreateItem] =
+  val insertItem: Command[ItemId *: CreateItem *: EmptyTuple] =
     sql"""
         INSERT INTO items
         VALUES ($itemId, $itemName, $itemDesc, $money, $brandId, $categoryId)
        """.command.contramap {
-      case id ~ i =>
+      case id *: i *: EmptyTuple =>
         id *: i.name *: i.description *: i.price *: i.brandId *: i.categoryId *: EmptyTuple
     }
 
-  val updateItem: Command[UpdateItem] =
+  val updateItem: Command[UpdateItem *: EmptyTuple] =
     sql"""
         UPDATE items
         SET price = $money
         WHERE uuid = $itemId
-       """.command.contramap(i => i.price ~ i.id)
+       """.command.contramap[UpdateItem *: EmptyTuple](i *: EmptyTuple => i.price *: i.id *: EmptyTuple)
 
 }

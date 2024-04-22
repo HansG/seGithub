@@ -37,7 +37,7 @@ object Orders {
       def get(userId: UserId, orderId: OrderId): F[Option[Order]] =
         postgres.use { session =>
           session.prepare(selectByUserIdAndOrderId).flatMap { q =>
-            q.option(userId ~ orderId)
+            q.option(userId *: orderId)
           }
         }
 
@@ -59,7 +59,7 @@ object Orders {
             ID.make[F, OrderId].flatMap { id =>
               val itMap = items.toList.map(x => x.item.uuid -> x.quantity).toMap
               val order = Order(id, paymentId, itMap, total)
-              cmd.execute(userId ~ order).as(id)
+              cmd.execute(userId *: order).as(id)
             }
           }
         }
@@ -70,15 +70,15 @@ object Orders {
 private object OrderSQL {
 
   val decoder: Decoder[Order] =
-    (orderId ~ userId ~ paymentId ~ jsonb[Map[ItemId, Quantity]] ~ money).map {
-      case o ~ _ ~ p ~ i ~ t =>
+    (orderId *: userId *: paymentId *: jsonb[Map[ItemId, Quantity]] *: money).map {
+      case o *: _ *: p *: i *: t =>
         Order(o, p, i, t)
     }
 
-  val encoder: Encoder[UserId ~ Order] =
-    (orderId ~ userId ~ paymentId ~ jsonb[Map[ItemId, Quantity]] ~ money).contramap {
-      case id ~ o =>
-        o.id ~ id ~ o.paymentId ~ o.items ~ o.total
+  val encoder: Encoder[UserId *: Order] =
+    (orderId *: userId *: paymentId *: jsonb[Map[ItemId, Quantity]] *: money).contramap {
+      case id *: o =>
+        o.id *: id *: o.paymentId *: o.items *: o.total
     }
 
   val selectByUserId: Query[UserId, Order] =
@@ -94,7 +94,7 @@ private object OrderSQL {
         AND uuid = $orderId
        """.query(decoder)
 
-  val insertOrder: Command[UserId ~ Order] =
+  val insertOrder: Command[UserId *: Order] =
     sql"""
         INSERT INTO orders
         VALUES ($encoder)
