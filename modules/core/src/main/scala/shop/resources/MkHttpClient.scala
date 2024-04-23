@@ -14,6 +14,7 @@ trait MkHttpClient[F[_]] {
 object MkHttpClient {
   def apply[F[_]: MkHttpClient]: MkHttpClient[F] = implicitly
 
+  //§§ Funktion für impliziten Wert, hier Typclass; Parameter ist F mit Constraint : Async
   implicit def forAsync[F[_]: Async]: MkHttpClient[F] =
     new MkHttpClient[F] {
       def newEmber(c: HttpClientConfig): Resource[F, Client[F]] =

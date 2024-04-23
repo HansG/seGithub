@@ -23,7 +23,7 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
   def makeCounter(inc: IO[Unit], retrieve: IO[Int]): Counter = new Counter {
     val increment: IO[Unit] = inc
-    val get: IO[Int]        = retrieve
+    val get: IO[Int] = retrieve
   }
 
   val refCounter: IO[Counter] =
@@ -31,8 +31,8 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
   val useCounter = for {
     counter <- refCounter
-    _       <- counter.increment.parReplicateA(2)
-    v       <- counter.get
+    _ <- counter.increment.parReplicateA(2) //§§ parReplicateA: parallel wiederholen!
+    v <- counter.get
   } yield v
 
   test("useCounter") {
@@ -44,7 +44,7 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
     aufrufen:  client.run(req):Resource[F, Response[F]] z.B. req=Request()
     Zugriff auf Antwort: resource.use(resp =>  F[B])
   Server, HttpRoutes[IO] erzeugen: HttpRoutes.of[IO] { case req => IO(Response) }
-    aufrufen (ohne WebServer): httpRoutes.orNotFound.run(Request()) : IO[Response]
+    Test-aufrufen (ohne WebServer): httpRoutes.orNotFound.run(Request()) : IO[Response]
    */
   def sampleRequest(client: Client[IO]): IO[Unit] = client.run(Request()).use_
 
@@ -85,7 +85,7 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
 
   def callRoute(routes: HttpRoutes[IO]): IO[List[String]] = {
     println("Neu: handler run")
-    val runIt         = routes.orNotFound.run(Request())
+    val runIt = routes.orNotFound.run(Request())
     val runAndGetBody = runIt.flatMap(_.bodyText.compile.string).flatTap(s => IO(println("runAndGetBody: " + s)))
 
     runAndGetBody.replicateA(3)
@@ -95,7 +95,7 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
     // validate results
     .flatTap {
       case results if results.forall(_ == "2") => IO(println("Success!"))
-      case _                                   => IO(println("Failure!"))
+      case _ => IO(println("Failure!"))
     }
 
   test("callRouteExClient") {
@@ -127,7 +127,7 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
     //    case POST -> Root / "users" / id =>
     case _ =>
       service.find(1).map {
-        case None       => println("service.find: "); Response[IO](Ok).withEntity("None")
+        case None => println("service.find: "); Response[IO](Ok).withEntity("None")
         case Some(user) => println("service.find: "); Response[IO](Ok).withEntity(user)
       }
     //    case _ => NotFound()
@@ -147,7 +147,7 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
   import cats.data.Kleisli
   import cats.data.OptionT
 
-  case class CounterWithReset(c: Counter, withFreshCounter: IO ~> IO)
+  case class CounterWithReset(counter: Counter, withFreshCounter: IO ~> IO)
 
 
   def withCountReset(r: HttpRoutes[IO], c: CounterWithReset): HttpRoutes[IO] = Kleisli { req =>
@@ -160,13 +160,13 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
     r.mapF(_.mapK(c.withFreshCounter))
 
   case class Mode()
+
   object Old extends Mode
+
   object New extends Mode
 
 
-
-
-  def localRefCounter(implicit m:Mode): IO[CounterWithReset] = m match {
+  def localRefCounter(implicit m: Mode): IO[CounterWithReset] = m match {
     case Old => IOLocal(0).map { local =>
       val c = makeCounter(
         local.update(_ + 1),
@@ -181,27 +181,35 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
       CounterWithReset(c, Resource.make(IO.unit)(_ => local.reset).surroundK)
     }
 
-    case New  =>
-        // 1
-        Ref[IO].of(0).flatMap(IOLocal(_)).map { local =>
-          // 2
-          val c = makeCounter(
-            local.get.flatMap(_.update(_ + 1)),
-            local.get.flatMap(_.get)
-          )
+    case New =>
+      // 1
+      Ref[IO].of(0).flatMap(IOLocal(_)).map { local =>
+        // 2
+        val c = makeCounter(
+          local.get.flatMap(_.update(_ + 1)),
+          local.get.flatMap(_.get)
+        )
 
-          // 3
-          val withFreshK = Resource.make(Ref[IO].of(0).flatMap(local.set))(_ => local.reset).surroundK
+        // 3
+        val withFreshK = Resource.make(Ref[IO].of(0).flatMap(local.set))(_ => local.reset).surroundK
 
-          // 4
-          CounterWithReset(c, withFreshK)
-        }
+        // 4
+        CounterWithReset(c, withFreshK)
+      }
   }
+
+  /*
+  §§ Resource : NonEmptyParallel -> parMapN: Resourcen parallel erzeugen und mappen
+  andere Mgl. ist flatMap:
+  def mkResource(s: String) = Resource.make(IO(println(s"Acquiring $$s")) *> IO. pure(s))(IO(println(s"Releasing $$_")))
+    val r = for {   outer <- mkResource("outer") ;   inner <- mkResource("inner") } yield (outer, inner)
+    r. use { case (a, b) =>   IO(println(s"Using $$a and $$b")) }
+   */
 
 
   def routeExClientLocal(rawClient: Client[IO]): IO[HttpRoutes[IO]] =
     localRefCounter.map { counterWithReset =>
-      val counter = counterWithReset.c
+      val counter = counterWithReset.counter
 
       val client = withCount(rawClient, counter)
 
@@ -212,7 +220,6 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
         counterWithReset
       )
     }
-
 
 
   def routeExClient(client: Client[IO], c: Counter)(implicit m: Mode): HttpRoutes[IO] = m match {
@@ -233,11 +240,14 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
   }
 
 
-  def ioRoute = localRefCounter.flatMap { cwr =>
-    val cc = withCount(Client.fromHttpApp[IO](HttpApp.pure(Response(Ok).withEntity("HG"))), cwr.c)
-    val r  = routeExClient(cc, cwr.c)
-    cwr.withFreshCounter(r)
-  }
+
+  def ioRoute =
+    for {
+      cwr <- localRefCounter
+            cc = withCount(Client.fromHttpApp[IO](HttpApp.pure(Response(Ok).withEntity("HG"))), cwr.counter)
+            r = routeExClient(cc, cwr.counter)
+      r1 <- cwr.withFreshCounter(IO(r))
+    }  yield r1
 
 
   implicit val mode : Mode = Old

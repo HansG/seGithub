@@ -127,6 +127,7 @@ object MainX extends IOApp.Simple {
   override def run: IO[Unit] = runTestS
  // override def run: IO[Unit] = runFst
 
+  //zum Testen: parallel HttpClient und HttpServer erzeugen
    def runScd: IO[Unit] =
     ConfigX.dcfg.flatMap { cfg =>
       Logger[IO].info(s"Loaded config $cfg") >>
@@ -248,6 +249,7 @@ object BrandClientX {
     new BrandClientX with Http4sClientDsl[IO] {
       def process: IO[List[Brand]] =
         Uri.fromString(cfg.uri.value + "/v1/brands").liftTo[IO].flatMap { uri =>
+          //§§ httpclient aufrufen:
           client.run(GET(uri)).use { resp =>
             resp.status match {
               case Status.Ok | Status.Conflict =>
