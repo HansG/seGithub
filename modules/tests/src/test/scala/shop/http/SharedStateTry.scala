@@ -1,9 +1,12 @@
 package shop.http
 
-import cats.effect.{ IO, Ref }
-import munit.{ CatsEffectSuite, ScalaCheckEffectSuite }
+import cats.effect.{IO, Ref}
+import munit.{CatsEffectSuite, ScalaCheckEffectSuite}
 import cats.implicits._
 import cats.effect.implicits._
+import cats.mtl.syntax.local
+import cats.syntax.flatMap
+import org.checkerframework.checker.units.qual.m
 import org.http4s.Status.Ok
 import org.http4s._
 import org.http4s.dsl.io._
@@ -66,40 +69,26 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
       }
   }
 
-  def callRouteExClient(route: Client[IO] => IO[HttpRoutes[IO]]): IO[List[String]] = {
+  def callAppExClient(route: Client[IO] => IO[HttpRoutes[IO]]): IO[List[String]] = {
     // our fake client, which simply succeeds
     println("Neuer fake client")
     val c = Client.fromHttpApp[IO](HttpApp.pure(Response(Ok).withEntity("HG")))
-    callRoute(route(c))
+    callApp(route(c))
   }
 
-  def callRoute(route: IO[HttpRoutes[IO]]): IO[List[String]] = {
+  def callApp(route: IO[HttpRoutes[IO]]): IO[List[String]] = {
     // our fake client, which simply succeeds
     println("Neuer fake client")
     val c = Client.fromHttpApp[IO](HttpApp.pure(Response(Ok).withEntity("HG")))
 
     route.flatMap {
-      callRoute(_)
+      callApp(_)
     }
   }
 
-  def callRoute(routes: HttpRoutes[IO]): IO[List[String]] = {
-    println("Neu: handler run")
-    val runIt = routes.orNotFound.run(Request())
-    val runAndGetBody = runIt.flatMap(_.bodyText.compile.string).flatTap(s => IO(println("runAndGetBody: " + s)))
-
-    runAndGetBody.replicateA(3)
-  }.flatTap {
-      case results => IO(println("results: " + results))
-    }
-    // validate results
-    .flatTap {
-      case results if results.forall(_ == "2") => IO(println("Success!"))
-      case _ => IO(println("Failure!"))
-    }
 
   test("callRouteExClient") {
-    callRouteExClient(c => IO(routeExClient(c))).flatTap(
+    callAppExClient(c => IO(routeExClient(c))).flatTap(
       results =>
         if (results.forall(_ == "2")) IO(println("Success!"))
         else IO(println("Failure!"))
@@ -134,7 +123,7 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
   }
 
   test("routeExService") {
-    callRouteExClient(c => IO(new UserService(c)).map(routeExService(_))).flatTap(
+    callAppExClient(c => IO(new UserService(c)).map(routeExService(_))).flatTap(
       results =>
         if (results.forall(_ == "2")) IO(println("Success!"))
         else IO(println("Failure!"))
@@ -150,9 +139,9 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
   case class CounterWithReset(counter: Counter, withFreshCounter: IO ~> IO)
 
 
-  def withCountReset(r: HttpRoutes[IO], c: CounterWithReset): HttpRoutes[IO] = Kleisli { req =>
+  def withCountReset(r: HttpApp[IO], c: CounterWithReset): HttpApp[IO] = Kleisli { req =>
     OptionT {
-      c.withFreshCounter(r.run(req).value)
+      c.withFreshCounter(r.run(req))
     }
   }
 
@@ -172,11 +161,12 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
         local.update(_ + 1),
         local.get
       )
-      /* §§ Trick: nur "Lebenszyklus" von Resource nutzen:  run => Resource.make(beforeRun)(_ => afterRun).surroundK(run) (==.use(_ => run):
+      /* §§ Trick: "Lebenszyklus" von Resource nutzen, um ein gegebenes IO (run) mappen auf ein IO (d.h. IO ~> IO , allg. F ~> F)  mit:  unmittelbar vor und/oder nach run wird ein IO (beforeRun) und ein  IO (afterRun) ausgeführt:  run => Resource.make(beforeRun)(_ => afterRun).surroundK(run) (==.use(_ => run):
         Folgende Aktionen werden per Lebenszyklus unmittelbar nacheinander ausgeführt (im selben Fiber):
-        1. Aktion beforeRun (Lebenszyklus:erzeuge Resource)  2.Aktion: run (Lebenszyklus:benutze Resource, hier use(_ => run), d.h. nur formal)
-        3.Aktion  afterRun unmittelbar NACH run (d.h. nach "Beendigung" von run) ausführen
-      -> hier afterRun_>local.reset unmittelbar nach Erzeugung des Response
+        1.Aktion  beforeRun (Lebenszyklus:erzeuge Resource)  2.Aktion: run (Lebenszyklus:benutze Resource, hier use(_ => run), d.h. nur formal) 3.Aktion  afterRun unmittelbar NACH run (d.h. nach "Beendigung" von run)
+        (hier nur local.reset unmittelbar nach run, vgl. unten auchmit beforeRun)
+
+        §§ Trick: eine Resource[IO,A] mappen auf eine Resource[IO,A] mit: a:A bleibt dasselbe, jedoch vor und/oder nach run in Resource[IO,A].use( run(_)) wird ein anderes IO ausgeführt! (vgl. withCount)
        */
       CounterWithReset(c, Resource.make(IO.unit)(_ => local.reset).surroundK)
     }
@@ -222,7 +212,7 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
     }
 
 
-  def routeExClient(client: Client[IO], c: Counter)(implicit m: Mode): HttpRoutes[IO] = m match {
+  def routeExClient(client: Client[IO], c: Counter)(implicit m: Mode): HttpRoutes[IO]  = m match {
     case Old =>
       HttpRoutes.of[IO] {
         case _ =>
@@ -239,6 +229,23 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
       }
   }
 
+  def appExClient(client: Client[IO], c: Counter)(implicit m: Mode): HttpApp[IO] = routeExClient.orNotFound
+
+
+  def callApp(routes: HttpRoutes[IO]): IO[List[String]] = {
+    println("Neu: handler run")
+    val runIt = routes.orNotFound.run(Request())
+    val runAndGetBody = runIt.flatMap(_.bodyText.compile.string).flatTap(s => IO(println("runAndGetBody: " + s)))
+
+    runAndGetBody.replicateA(3)
+  }.flatTap {
+      case results => IO(println("results: " + results))
+    }
+    // validate results
+    .flatTap {
+      case results if results.forall(_ == "2") => IO(println("Success!"))
+      case _ => IO(println("Failure!"))
+    }
 
 
   def ioRoute =
@@ -249,14 +256,62 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
       r1 <- cwr.withFreshCounter(IO(r))
     }  yield r1
 
+  def ioRoute1 =
+    for {
+      local <- Ref[IO].of(0).flatMap(IOLocal(_))
+            counter = makeCounter(
+              local.get.flatMap(_.update(_ + 1)),
+              local.get.flatMap(_.get)
+            )
+            cc = withCount(Client.fromHttpApp[IO](HttpApp.pure(Response(Ok).withEntity("HG"))), counter)
+            r = routeExClient(cc, counter)
+      r1 <- Resource.make(Ref[IO].of(0).flatMap(local.set))(_ => local.reset).use(_ => IO(r))
+    }  yield r1
+
+
+  def ioRoute2 =
+    for {
+      local <- Ref[IO].of(0).flatMap(IOLocal(_))
+    }  yield {
+      val counter = makeCounter(
+        local.get.flatMap(_.update(_ + 1)),
+        local.get.flatMap(_.get)
+      )
+      val cc = withCount(Client.fromHttpApp[IO](HttpApp.pure(Response(Ok).withEntity("HG"))), counter)
+      (routeExClient(cc, counter), local)
+    }
+
+  def ioRoute3 =
+    for {
+      (route, local) <- ioRoute2
+      resultL <- Resource.make(Ref[IO].of(0).flatMap(local.set))(_ => local.reset).use(_ => callApp(route))
+    }  yield {
+      resultL
+    }
+
+
 
   implicit val mode : Mode = Old
+
+
+  test("routeExClientLocal3") {
+    ioRoute
+      .flatMap {
+        callApp(_)
+      }
+      .flatTap(
+        results =>
+          if (results.forall(_ == "2")) IO(println("Success!"))
+          else IO(println("Failure!"))
+      )
+  }
+
 
 
   test("routeExClientLocal1") {
     ioRoute
       .flatMap {
-        callRoute(_)
+        callApp(_)
       }
       .flatTap(
         results =>
@@ -266,7 +321,7 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
   }
 
   test("routeExClientLocal") {
-    callRouteExClient((rawClient: Client[IO]) => routeExClientLocal(rawClient)).flatTap(
+    callAppExClient((rawClient: Client[IO]) => routeExClientLocal(rawClient)).flatTap(
       results =>
         if (results.forall(_ == "2")) IO(println("Success!"))
         else IO(println("Failure!"))
