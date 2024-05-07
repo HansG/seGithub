@@ -1,22 +1,21 @@
 package shop.domain
 
 import java.util.UUID
-
 import shop.domain.brand._
-import shop.domain.cart.{ CartItem, Quantity }
+import shop.domain.cart.{CartItem, Quantity}
 import shop.domain.category._
-import shop.optics.uuid
-
+import shop.optics.{IsUUID, uuid}
 import derevo.cats._
 import derevo.circe.magnolia._
 import derevo.derive
 import eu.timepit.refined.api.Refined
 import eu.timepit.refined.auto._
 import eu.timepit.refined.cats._
-import eu.timepit.refined.string.{ Uuid, ValidBigDecimal }
+import eu.timepit.refined.string.{Uuid, ValidBigDecimal}
 import eu.timepit.refined.types.string.NonEmptyString
 import io.circe.refined._
 import io.estatico.newtype.macros.newtype
+import monocle.Iso
 import squants.market._
 
 object item {
@@ -24,6 +23,12 @@ object item {
   @derive(decoder, encoder, keyDecoder, keyEncoder, eqv, show, uuid)
   @newtype
   case class ItemId(value: UUID)
+
+  object ItemId {
+    implicit val identityItemId: IsUUID[ItemId] = new IsUUID[ItemId] {
+      val _UUID = Iso[UUID, ItemId](ItemId(_))(_.value)
+    }
+  }
 
   @derive(decoder, encoder, eqv, show)
   @newtype

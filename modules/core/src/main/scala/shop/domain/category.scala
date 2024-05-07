@@ -18,7 +18,7 @@ object category {
   case class CategoryId(value: UUID)
 
   object CategoryId {
-    implicit val identityProdId: IsUUID[CategoryId] = new IsUUID[CategoryId] {
+    implicit val identityCategoryId: IsUUID[CategoryId] = new IsUUID[CategoryId] {
       val _UUID = Iso[UUID, CategoryId](CategoryId(_))(_.value)
     }
   }

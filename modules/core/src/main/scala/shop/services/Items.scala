@@ -106,11 +106,11 @@ private object ItemSQL {
         id *: i.name *: i.description *: i.price *: i.brandId *: i.categoryId *: EmptyTuple
     }
 
-  val updateItem: Command[UpdateItem *: EmptyTuple] =
+  val updateItem: Command[UpdateItem] =
     sql"""
         UPDATE items
         SET price = $money
         WHERE uuid = $itemId
-       """.command.contramap[UpdateItem *: EmptyTuple](i *: EmptyTuple => i.price *: i.id *: EmptyTuple)
+       """.command.contramap[UpdateItem](case i => i.price *: i.id *: EmptyTuple)
 
 }

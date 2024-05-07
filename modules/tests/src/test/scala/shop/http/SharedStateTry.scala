@@ -153,7 +153,16 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
   object Old extends Mode
 
   object New extends Mode
-
+/*
+§§ Plan AKDB
+mkCounter1(Local)=(ref <- local.get; mkCounter(ref))
+    clientWithCount(fakeClient, Counter) = ....
+   withFreshRef: run =>  Resource[Client](pre: newRef->local)(post:local.reset).use(run)
+   Local , fakeClient -> clientWithCount = clientWithCount(fakeClient, mkCounter1(Local))
+                      ->  HttRoutes/App :
+                              withFreshRef:
+                              call(clientWithCount).replicate in versch. Fibers
+ */
 
   def localRefCounter(implicit m: Mode): IO[CounterWithReset] = m match {
     case Old => IOLocal(0).map { local =>

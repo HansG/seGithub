@@ -17,7 +17,7 @@ import io.estatico.newtype.macros.newtype
 import monocle.Iso
 
 object brand {
-  @derive(decoder, encoder, eqv, show) //, uuid
+  @derive(decoder, encoder, eqv, show, uuid) //
   @newtype
   case class BrandId(value: UUID)
 

@@ -2,25 +2,31 @@ package shop.domain
 
 import java.util.UUID
 import javax.crypto.Cipher
-
 import scala.util.control.NoStackTrace
-
-import shop.optics.uuid
-
+import shop.optics.{IsUUID, uuid}
 import derevo.cats._
-import derevo.circe.magnolia.{ decoder, encoder }
+import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.string.NonEmptyString
 import io.circe._
 import io.circe.refined._
 import io.estatico.newtype.macros.newtype
+import monocle.Iso
+import shop.domain.item.ItemId
 
 object auth {
 
   @derive(decoder, encoder, eqv, show, uuid)
   @newtype
   case class UserId(value: UUID)
+
+  object UserId {
+    implicit val identityUserId: IsUUID[UserId] = new IsUUID[UserId] {
+      val _UUID = Iso[UUID, UserId](UserId(_))(_.value)
+    }
+  }
+
 
   @derive(decoder, encoder, eqv, show)
   @newtype
