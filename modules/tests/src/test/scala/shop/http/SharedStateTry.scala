@@ -153,32 +153,51 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
   object Old extends Mode
 
   object New extends Mode
-/*
-§§ Plan AKDB
-mkCounter1(Local)=(ref <- local.get; mkCounter(ref))
-    clientWithCount(fakeClient, Counter) = ....
-   withFreshRef: run =>  Resource[Client](pre: newRef->local)(post:local.reset).use(run)
-   Local , fakeClient -> clientWithCount = clientWithCount(fakeClient, mkCounter1(Local))
-                      ->  HttRoutes/App :
-                              withFreshRef:
-                              call(clientWithCount).replicate in versch. Fibers
- */
 
+  /* §§ Trick: "Lebenszyklus" von Resource nutzen, um ein gegebenes IO (run) mappen auf ein IO (d.h. IO ~> IO , allg. F ~> F)  mit:
+      unmittelbar vor und/oder nach run wird ein IO (beforeRun) und ein  IO (afterRun) ausgeführt:
+      run => Resource.make(beforeRun)(_ => afterRun).surroundK(run) (==.use(_ => run) (vgl. CounterWithReset):
+      Folgende Aktionen werden per Lebenszyklus unmittelbar nacheinander ausgeführt (im selben Fiber):
+      1.Aktion  beforeRun (Lebenszyklus:erzeuge Resource)  2.Aktion: run (Lebenszyklus:benutze Resource, hier use(_ => run), d.h. nur formal)
+      3.Aktion  afterRun unmittelbar NACH run (d.h. nach "Beendigung" von run)
+      (hier ur local.reset unmittelbar nach run, vgl. unten auchmit beforeRun)
+
+    §§ Trick: eine Resource[IO,A] resa  mappen auf eine Resource[IO,A] newResa mit: a:A bleibt dasselbe, jedoch vor und/oder nach
+    run (in Resource[IO,A].use( run(_))) wird ein anderes IO otherIO ausgeführt! ->  newResa = otherIO.toResource *> resa (vgl  withCount)
+
+    §§ Trick: Resourcen parallel erzeugen:
+      Resource : NonEmptyParallel -> parMapN: Resourcen parallel erzeugen und mappen
+      andere Mgl. ist flatMap, Beispiel:
+        def mkResource(s: String) = Resource.make(IO(println(s"Acquiring $$s")) *> IO.pure(s))(IO(println(s"Releasing $$_")))
+          val r = for {   outer <- mkResource("outer") ;   inner <- mkResource("inner") } yield (outer, inner)
+          r. use { case (a, b) =>   IO(println(s"Using $$a and $$b")) }
+*/
   def localRefCounter(implicit m: Mode): IO[CounterWithReset] = m match {
     case Old => IOLocal(0).map { local =>
       val c = makeCounter(
         local.update(_ + 1),
         local.get
       )
-      /* §§ Trick: "Lebenszyklus" von Resource nutzen, um ein gegebenes IO (run) mappen auf ein IO (d.h. IO ~> IO , allg. F ~> F)  mit:  unmittelbar vor und/oder nach run wird ein IO (beforeRun) und ein  IO (afterRun) ausgeführt:  run => Resource.make(beforeRun)(_ => afterRun).surroundK(run) (==.use(_ => run):
-        Folgende Aktionen werden per Lebenszyklus unmittelbar nacheinander ausgeführt (im selben Fiber):
-        1.Aktion  beforeRun (Lebenszyklus:erzeuge Resource)  2.Aktion: run (Lebenszyklus:benutze Resource, hier use(_ => run), d.h. nur formal) 3.Aktion  afterRun unmittelbar NACH run (d.h. nach "Beendigung" von run)
-        (hier nur local.reset unmittelbar nach run, vgl. unten auchmit beforeRun)
-
-        §§ Trick: eine Resource[IO,A] mappen auf eine Resource[IO,A] mit: a:A bleibt dasselbe, jedoch vor und/oder nach run in Resource[IO,A].use( run(_)) wird ein anderes IO ausgeführt! (vgl. withCount)
-       */
       CounterWithReset(c, Resource.make(IO.unit)(_ => local.reset).surroundK)
     }
+
+    /*
+    Plan:
+
+    IOLocal[Ref] .map { local =>  val resLocal = Resource.make(Ref[IO].of(0).flatMap(local.set))(_ => local.reset) ; .surroundK auch möglich (Zugriff auf ref über local)
+    Client.fromHttpApp[IO] => withCount(_,  mkCounter(ref))  mit mkCounter: ref => makeCounter( ref.update(_ + 1), ref.get)
+
+    routes ....  resLocal.use(local) => val cwc =  withCount(_,  mkCounter(local.ref))  ; callClient(cwc).replicate; ...return ref.get
+
+    §§ Plan AKDB
+    mkCounter1(Local)=(ref <- local.get; mkCounter(ref))
+        clientWithCount(fakeClient, Counter) = ....
+       withFreshRef: run =>  Resource[Client](pre: newRef->local)(post:local.reset).use(run)
+       Local , fakeClient -> clientWithCount = clientWithCount(fakeClient, mkCounter1(Local))
+                          ->  HttRoutes/App :
+                                  withFreshRef:
+                                  call(clientWithCount).replicate in versch. Fibers
+     */
 
     case New =>
       // 1
@@ -197,13 +216,6 @@ mkCounter1(Local)=(ref <- local.get; mkCounter(ref))
       }
   }
 
-  /*
-  §§ Resource : NonEmptyParallel -> parMapN: Resourcen parallel erzeugen und mappen
-  andere Mgl. ist flatMap:
-  def mkResource(s: String) = Resource.make(IO(println(s"Acquiring $$s")) *> IO. pure(s))(IO(println(s"Releasing $$_")))
-    val r = for {   outer <- mkResource("outer") ;   inner <- mkResource("inner") } yield (outer, inner)
-    r. use { case (a, b) =>   IO(println(s"Using $$a and $$b")) }
-   */
 
 
   def routeExClientLocal(rawClient: Client[IO]): IO[HttpRoutes[IO]] =
