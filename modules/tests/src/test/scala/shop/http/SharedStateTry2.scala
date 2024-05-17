@@ -4,6 +4,17 @@ import cats.effect.{IO, Ref}
 import cats.implicits.catsSyntaxParallelAp1
 import munit.{CatsEffectSuite, ScalaCheckEffectSuite}
 
+/*
+ §§ Plan AKDB
+    mkCounter1(Local)=(ref <- local.get; mkCounter(ref))
+        clientWithCount(fakeClient, Counter) = ....
+       withFreshRef: run =>  Resource[Client](pre: newRef->local)(post:local.reset).use(run)
+       Local , fakeClient -> clientWithCount = clientWithCount(fakeClient, mkCounter1(Local))
+                          ->  HttRoutes/App :
+                                  withFreshRef:
+                                  call(clientWithCount).replicate in versch. Fibers
+
+ */
 class SharedStateTry2  extends CatsEffectSuite with ScalaCheckEffectSuite {
 
   trait Counter {
