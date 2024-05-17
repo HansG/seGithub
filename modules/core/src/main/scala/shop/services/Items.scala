@@ -111,6 +111,8 @@ private object ItemSQL {
         UPDATE items
         SET price = $money
         WHERE uuid = $itemId
-       """.command.contramap[UpdateItem](case i => i.price *: i.id *: EmptyTuple)
+       """.command.contramap[UpdateItem] {
+      case i => i.price *: i.id *: EmptyTuple
+    }
 
 }
