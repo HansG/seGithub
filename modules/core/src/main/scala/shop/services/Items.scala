@@ -67,7 +67,7 @@ private object ItemSQL {
 
   val decoder: Decoder[Item] =
     (itemId *: itemName *: itemDesc *: money *: brandId *: brandName *: categoryId *: categoryName *: EmptyTuple).map {
-      case i *: n *: d *: p *: bi *: bn *: ci *: cn  *: EmptyTuple=>
+      case i *: n *: d *: p *: bi *: bn *: ci *: cn  *: EmptyTuple =>
         Item(i, n, d, p, Brand(bi, bn), Category(ci, cn))
     }
 

@@ -24,11 +24,11 @@ object item {
   @newtype
   case class ItemId(value: UUID)
 
-  object ItemId {
-    implicit val identityItemId: IsUUID[ItemId] = new IsUUID[ItemId] {
-      val _UUID = Iso[UUID, ItemId](ItemId(_))(_.value)
-    }
-  }
+//  object ItemId {
+//    implicit val identityItemId: IsUUID[ItemId] = new IsUUID[ItemId] {
+//      val _UUID = Iso[UUID, ItemId](ItemId(_))(_.value)
+//    }
+//  }
 
   @derive(decoder, encoder, eqv, show)
   @newtype
