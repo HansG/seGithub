@@ -36,7 +36,7 @@ class SharedStateTry2  extends CatsEffectSuite with ScalaCheckEffectSuite {
   val refCounterd: IO[Counter] =
     Ref[IO].of(0).map { ref =>
       new Counter {
-        def increment: IO[Unit] = ref.update(_ + 1)
+        def increment: IO[Unit] = {println("increment new IO"); ref.update(_ + 1)}
         def get: IO[Int] = ref.get
       }
     }.flatTap(c => IO(println("Neuer Counter " + c)))

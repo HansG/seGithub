@@ -44,7 +44,7 @@ object TxItems {
                   _   <- ic.execute(Category(cid, item.category)).void
                   tid <- ID.make[F, ItemId]
                   itm = CreateItem(item.name, item.description, item.price, bid, cid)
-                  _ <- it.execute(tid *: itm).void
+                  _ <- it.execute((tid , itm)).void
                 } yield tid
               }
           }

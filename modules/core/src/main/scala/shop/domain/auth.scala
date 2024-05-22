@@ -17,7 +17,7 @@ import shop.domain.item.ItemId
 
 object auth {
 
-  @derive(decoder, encoder, eqv, show, uuid)
+  @derive(decoder, encoder, eqv, show)//, uuid)
   @newtype
   case class UserId(value: UUID)
 

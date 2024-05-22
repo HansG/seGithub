@@ -7,14 +7,15 @@ import shop.domain.item._
 import shop.domain.order._
 import shop.effects.GenUUID
 import shop.sql.codecs._
-
 import cats.data.NonEmptyList
 import cats.effect._
 import cats.syntax.all._
-import skunk._
 import skunk.circe.codec.all._
-import skunk.implicits._
 import squants.market._
+import skunk._
+import skunk.implicits._
+//import org.typelevel.twiddles._
+
 
 trait Orders[F[_]] {
   def get(userId: UserId, orderId: OrderId): F[Option[Order]]
@@ -36,8 +37,8 @@ object Orders {
 
       def get(userId: UserId, orderId: OrderId): F[Option[Order]] =
         postgres.use { session =>
-          session.prepare(selectByUserIdAndOrderId).flatMap { q =>
-            q.option(userId *: orderId)
+          session.prepare(selectByUserIdAndOrderId).flatMap { (q :  PreparedQuery[F, UserId *: OrderId *: EmptyTuple, Order]) =>
+            q.option((userId , orderId))
           }
         }
 
@@ -54,15 +55,14 @@ object Orders {
           items: NonEmptyList[CartItem],
           total: Money
       ): F[OrderId] =
-        postgres.use { session =>
-          session.prepare(insertOrder).flatMap { cmd =>
+        postgres.flatMap( session =>
+          session.prepareR(insertOrder)).use { cmd =>
             ID.make[F, OrderId].flatMap { id =>
               val itMap = items.toList.map(x => x.item.uuid -> x.quantity).toMap
               val order = Order(id, paymentId, itMap, total)
-              cmd.execute(userId *: order).as(id)
+              cmd.execute((userId , order)).as(id)
             }
           }
-        }
     }
 
 }
@@ -71,14 +71,16 @@ private object OrderSQL {
 
   val decoder: Decoder[Order] =
     (orderId *: userId *: paymentId *: jsonb[Map[ItemId, Quantity]] *: money).map {
-      case o *: _ *: p *: i *: t =>
+      case o *: _ *: p *: i *: t  *: EmptyTuple =>
         Order(o, p, i, t)
+      case _ => null
     }
 
-  val encoder: Encoder[UserId *: Order] =
+  val encoder: Encoder[UserId *: Order *: EmptyTuple] =
     (orderId *: userId *: paymentId *: jsonb[Map[ItemId, Quantity]] *: money).contramap {
-      case id *: o =>
-        o.id *: id *: o.paymentId *: o.items *: o.total
+      case id *: o *: EmptyTuple =>
+        o.id *: id *: o.paymentId *: o.items *: o.total *: EmptyTuple
+      case _ => null
     }
 
   val selectByUserId: Query[UserId, Order] =
@@ -94,7 +96,7 @@ private object OrderSQL {
         AND uuid = $orderId
        """.query(decoder)
 
-  val insertOrder: Command[UserId *: Order] =
+  val insertOrder: Command[UserId *: Order *: EmptyTuple] =
     sql"""
         INSERT INTO orders
         VALUES ($encoder)

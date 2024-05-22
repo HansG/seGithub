@@ -139,9 +139,9 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
   case class CounterWithReset(counter: Counter, withFreshCounter: IO ~> IO)
 
 
-  def withCountReset(r: HttpApp[IO], c: CounterWithReset): HttpApp[IO] = Kleisli { req =>
+  def withCountReset(r: HttpRoutes[IO], c: CounterWithReset): HttpRoutes[IO] = Kleisli { req =>
     OptionT {
-      c.withFreshCounter(r.run(req))
+      c.withFreshCounter(r.run(req).value)
     }
   }
 
@@ -250,7 +250,7 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
       }
   }
 
-  def appExClient(client: Client[IO], c: Counter)(implicit m: Mode): HttpApp[IO] = routeExClient.orNotFound
+  def appExClient(client: Client[IO], c: Counter): HttpApp[IO] = routeExClient(client, c).orNotFound
 
 
   def callApp(routes: HttpRoutes[IO]): IO[List[String]] = {

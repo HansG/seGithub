@@ -4,11 +4,12 @@ import shop.domain.ID
 import shop.domain.category._
 import shop.effects.GenUUID
 import shop.sql.codecs._
-
 import cats.effect._
 import cats.syntax.all._
 import skunk._
 import skunk.implicits._
+
+import java.util.UUID
 
 trait Categories[F[_]] {
   def findAll: F[List[Category]]
@@ -41,6 +42,7 @@ private object CategorySQL {
   val codec: Codec[Category] =
     (categoryId *: categoryName).imap {
       case i *: n *: EmptyTuple => Category(i, n)
+      case _  => Category( CategoryId(new UUID(99999, 12345678)) , CategoryName("unbekannt"))
     }(c => c.uuid *: c.name *: EmptyTuple)
 
   val selectAll: Query[Void, Category] =

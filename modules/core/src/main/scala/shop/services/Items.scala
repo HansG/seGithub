@@ -8,8 +8,17 @@ import shop.effects.GenUUID
 import shop.sql.codecs._
 import cats.effect._
 import cats.syntax.all._
+import org.junit.Test
+import org.typelevel.ci
+import shapeless.Generic
+import skunk.syntax.id
+import squants.market.USD
+
+import java.util.UUID
+//import shapeless.{::, Generic}
 import skunk.{*:, _}
 import skunk.implicits._
+import squants.market.Money
 
 trait Items[F[_]] {
   def findAll: F[List[Item]]
@@ -48,7 +57,7 @@ object Items {
         postgres.use { session =>
           session.prepare(insertItem).flatMap { cmd =>
             ID.make[F, ItemId].flatMap { id =>
-              cmd.execute(id, item).as(id)
+              cmd.execute((id, item)).as(id)
             }
           }
         }
@@ -63,12 +72,32 @@ object Items {
 
 }
 
+
+class ShapeTest {
+
+  case class Foo(i: Int, s: String, b: Boolean)
+
+  val fooGen = Generic[Foo]
+
+  val foo = Foo(23, "foo", true)
+
+  @Test
+  def testIt(): Unit =  {
+    val l = fooGen.to(foo)
+//    l should be( )
+    val r = 13 :: l.tail
+    val newFoo = fooGen.from(r)
+//    newFoo.i should be( )
+  }
+}
+
 private object ItemSQL {
 
-  val decoder: Decoder[Item] =
-    (itemId *: itemName *: itemDesc *: money *: brandId *: brandName *: categoryId *: categoryName *: EmptyTuple).map {
-      case i *: n *: d *: p *: bi *: bn *: ci *: cn  *: EmptyTuple =>
+  val decoder: Decoder[Item] =  
+    (itemId *: itemName *: itemDesc *: money *: brandId *: brandName *: categoryId *: categoryName).map { //hier kein  *: EmptyTuple!!
+      case i *: n *: d  *: p  *: bi  *: bn  *: ci  *: cn   *: EmptyTuple => //hier ein  *: EmptyTuple!!!
         Item(i, n, d, p, Brand(bi, bn), Category(ci, cn))
+      case _  =>  null
     }
 
   val selectAll: Query[Void, Item] =
@@ -104,6 +133,7 @@ private object ItemSQL {
        """.command.contramap {
       case id *: i *: EmptyTuple =>
         id *: i.name *: i.description *: i.price *: i.brandId *: i.categoryId *: EmptyTuple
+      case _ => null
     }
 
   val updateItem: Command[UpdateItem] =
