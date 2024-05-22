@@ -1,23 +1,27 @@
 package shop.interpreters
 
-import shop.auth.Crypto
-import shop.config.types.PasswordSalt
+import shop.algebras.LiveCrypto
+import shop.config.data.PasswordSalt
 import shop.domain.auth.Password
 
 import cats.effect.IO
+import ciris.Secret
 import eu.timepit.refined.auto._
-import weaver.SimpleIOSuite
+import eu.timepit.refined.cats._
+import suite._
 
-object CryptoSuite extends SimpleIOSuite {
+final class CryptoSuite extends PureTestSuite {
 
-  private val salt = PasswordSalt("53kr3t")
+  private val salt = PasswordSalt(Secret("53kr3t"))
 
   test("password encoding and decoding roundtrip") {
-    Crypto.make[IO](salt).map { crypto =>
-      val ini = Password("simple123")
-      val enc = crypto.encrypt(ini)
-      val dec = crypto.decrypt(enc)
-      expect.same(dec, ini)
+    IOAssertion {
+      LiveCrypto.make[IO](salt).map { crypto =>
+        val ini = Password("simple123")
+        val enc = crypto.encrypt(ini)
+        val dec = crypto.decrypt(enc)
+        assert(dec === ini)
+      }
     }
   }
 
