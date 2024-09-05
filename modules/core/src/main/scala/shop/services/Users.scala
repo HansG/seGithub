@@ -28,7 +28,7 @@ object Users {
           session.prepare(selectUser).flatMap { q =>
             q.option(username).map {
               case Some(u *: p *: EmptyTuple) => UserWithPassword(u.id, u.name, p).some
-              case _           => none[UserWithPassword]
+              case _                          => none[UserWithPassword]
             }
           }
         }
@@ -38,7 +38,7 @@ object Users {
           session.prepare(insertUser).flatMap { cmd =>
             ID.make[F, UserId].flatMap { id =>
               cmd
-                .execute((User(id, username) , password))
+                .execute((User(id, username), password))
                 .as(id)
                 .recoverWith {
                   case SqlState.UniqueViolation(_) =>

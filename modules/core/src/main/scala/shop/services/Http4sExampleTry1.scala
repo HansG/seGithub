@@ -10,17 +10,20 @@ import cats.effect.std.Console
 import cats.syntax.all._
 import fs2.Stream
 import fs2.io.net.Network
+//import fs2.io.file.{Files, Path}
 import io.circe.Encoder
 import io.circe.generic.semiauto.deriveEncoder
 import io.circe.syntax._
+//import skunk.codec.all._
+import skunk.codec.text.{ bpchar, varchar }
+import skunk.implicits._
+//import skunk._
+import skunk.{ Fragment, Query, Session, Void }
 import natchez.Trace
 import natchez.Trace.Implicits.noop
 import org.http4s.HttpRoutes
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
-import skunk.codec.text.{ bpchar, varchar }
-import skunk.implicits._
-import skunk.{ Fragment, Query, Session, Void }
 
 object Http4sExampleTry1 extends IOApp {
 

@@ -148,7 +148,8 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
   def withCountReset1(r: HttpRoutes[IO], c: CounterWithReset): HttpRoutes[IO] =
     r.mapF(_.mapK(c.withFreshCounter))
 
-  case class Mode()
+
+  sealed case class Mode()
 
   object Old extends Mode
 
@@ -180,10 +181,8 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
       )
       CounterWithReset(c, Resource.make(IO.unit)(_ => local.reset).surroundK)
     }
-
     /*
     Plan:
-
     IOLocal[Ref] .map { local =>  val resLocal = Resource.make(Ref[IO].of(0).flatMap(local.set))(_ => local.reset) ; .surroundK auch möglich (Zugriff auf ref über local)
     Client.fromHttpApp[IO] => withCount(_,  mkCounter(ref))  mit mkCounter: ref => makeCounter( ref.update(_ + 1), ref.get)
 
@@ -198,7 +197,6 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
                                   withFreshRef:
                                   call(clientWithCount).replicate in versch. Fibers
      */
-
     case New =>
       // 1
       Ref[IO].of(0).flatMap(IOLocal(_)).map { local =>
@@ -207,13 +205,12 @@ class SharedStateTry extends CatsEffectSuite with ScalaCheckEffectSuite {
           local.get.flatMap(_.update(_ + 1)),
           local.get.flatMap(_.get)
         )
-
         // 3
         val withFreshK = Resource.make(Ref[IO].of(0).flatMap(local.set))(_ => local.reset).surroundK
-
         // 4
         CounterWithReset(c, withFreshK)
       }
+
   }
 
 

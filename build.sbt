@@ -12,8 +12,8 @@ ThisBuild / scalafixDependencies += Libraries.organizeImports
 resolvers += Resolver.sonatypeRepo("snapshots")
 resolvers += Resolver.mavenCentral
 resolvers += "mvnrepository" at "https://mvnrepository.com/artifact"
-//resolvers += "Local Maven Repository" at "file://D:/se/m2/repository"
-resolvers += "Local Maven Repository" at "file://" + Path.userHome.absolutePath + "/.m2/repository"
+resolvers += "Local Maven Repository" at "file://C:/se/m2/repository"
+//resolvers += "Local Maven Repository" at "file://" + Path.userHome.absolutePath + "/.m2/repository"
 
 def dep(org: String, prefix: String, version: String)(modules: String*)(testModules: String*) =
   modules.map(m => org       %% (prefix ++ m) % version) ++

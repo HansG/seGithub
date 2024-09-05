@@ -3,9 +3,9 @@ package shop.domain
 import java.util.UUID
 import javax.crypto.Cipher
 import scala.util.control.NoStackTrace
-import shop.optics.{IsUUID, uuid}
+import shop.optics.{ IsUUID, uuid }
 import derevo.cats._
-import derevo.circe.magnolia.{decoder, encoder}
+import derevo.circe.magnolia.{ decoder, encoder }
 import derevo.derive
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.string.NonEmptyString
@@ -17,7 +17,7 @@ import shop.domain.item.ItemId
 
 object auth {
 
-  @derive(decoder, encoder, eqv, show)//, uuid)
+  @derive(decoder, encoder, eqv, show) //, uuid)
   @newtype
   case class UserId(value: UUID)
 
@@ -26,8 +26,6 @@ object auth {
       val _UUID = Iso[UUID, UserId](UserId(_))(_.value)
     }
   }
-
-
   @derive(decoder, encoder, eqv, show)
   @newtype
   case class UserName(value: String)

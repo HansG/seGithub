@@ -18,11 +18,12 @@ import mongo4cats.collection.GenericMongoCollection
 import mongo4cats.database.GenericMongoDatabase
 import monocle.Iso
 import munit.{CatsEffectSuite, ScalaCheckEffectSuite}
-import skunk._
+import skunk.{*:, _}
 import skunk.implicits._
 import skunk.codec.all._
 import natchez.Trace.Implicits.noop
 import org.scalacheck.effect.PropF
+import scodec.compat.*:
 import shop.domain.ID
 import shop.domain.auth.{EncryptedPassword, UserName}
 import shop.effects.GenUUID
@@ -123,14 +124,15 @@ object brandTestGen {
 
 object brandPG {//codecs und sql für Postgres -> entfällt bei MongoDB
   import brandDomain._
-
+  import skunk._
+  
   //codecs
   val brandIdT: Codec[BrandIdT]     = uuid.imap[BrandIdT](BrandIdT(_))(_.value)
   val brandNameT: Codec[BrandNameT] = varchar.imap[BrandNameT](BrandNameT(_))(_.value)
   val brandT: Codec[BrandT] =
     (brandIdT ~ brandNameT).imap {
       case i ~ n => BrandT(i, n)
-    }(b => b.uuid ~ b.name)
+    }(b => b.uuid *: b.name)
 
   val selectAll: Query[Void, BrandT] =
     sql"""
@@ -385,14 +387,14 @@ object UserTry {
   } {
     case u => u.id ~ u.name ~ u.pwd
   }
-  val insertSql: Command[((UUID, String), String)] = sql"insert into users VALUES ($uuid, $varchar, $varchar)".command
+  val insertSql: Command[UUID *: String *: String *: EmptyTuple] = sql"insert into users VALUES ($uuid, $varchar, $varchar)".command
   val insertSqlC                                   = sql"insert into users VALUES $codec".command
 
   def insert(dbres: Res, username: String, password: String) =
     dbres.use(s => insertS(s, username, password))
   def insertS(s: Session[IO], username: String, password: String) =
     //  s.prepare(insertSqlC).flatMap(pc => pc.execute(UserT(UUID.randomUUID(), username, password)))
-    s.prepare(insertSql).flatMap(pc => pc.execute((UUID.randomUUID() ~ username ~ password)))
+    s.prepare(insertSql).flatMap(pc => pc.execute((UUID.randomUUID() *: username *: password *: EmptyTuple)))
 
   val findSql: Query[String, UserT] = sql"select * from users where name = $varchar".query(codec)
 

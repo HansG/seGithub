@@ -42,7 +42,7 @@ private object CategorySQL {
   val codec: Codec[Category] =
     (categoryId *: categoryName).imap {
       case i *: n *: EmptyTuple => Category(i, n)
-      case _  => Category( CategoryId(new UUID(99999, 12345678)) , CategoryName("unbekannt"))
+      case _                    => Category(CategoryId(new UUID(99999, 12345678)), CategoryName("unbekannt"))
     }(c => c.uuid *: c.name *: EmptyTuple)
 
   val selectAll: Query[Void, Category] =

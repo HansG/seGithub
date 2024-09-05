@@ -16,7 +16,6 @@ import skunk._
 import skunk.implicits._
 //import org.typelevel.twiddles._
 
-
 trait Orders[F[_]] {
   def get(userId: UserId, orderId: OrderId): F[Option[Order]]
   def findBy(userId: UserId): F[List[Order]]
@@ -37,8 +36,9 @@ object Orders {
 
       def get(userId: UserId, orderId: OrderId): F[Option[Order]] =
         postgres.use { session =>
-          session.prepare(selectByUserIdAndOrderId).flatMap { (q :  PreparedQuery[F, UserId *: OrderId *: EmptyTuple, Order]) =>
-            q.option((userId , orderId))
+          session.prepare(selectByUserIdAndOrderId).flatMap {
+            (q: PreparedQuery[F, UserId *: OrderId *: EmptyTuple, Order]) =>
+              q.option((userId, orderId))
           }
         }
 
@@ -55,14 +55,13 @@ object Orders {
           items: NonEmptyList[CartItem],
           total: Money
       ): F[OrderId] =
-        postgres.flatMap( session =>
-          session.prepareR(insertOrder)).use { cmd =>
-            ID.make[F, OrderId].flatMap { id =>
-              val itMap = items.toList.map(x => x.item.uuid -> x.quantity).toMap
-              val order = Order(id, paymentId, itMap, total)
-              cmd.execute((userId , order)).as(id)
-            }
+        postgres.flatMap(session => session.prepareR(insertOrder)).use { cmd =>
+          ID.make[F, OrderId].flatMap { id =>
+            val itMap = items.toList.map(x => x.item.uuid -> x.quantity).toMap
+            val order = Order(id, paymentId, itMap, total)
+            cmd.execute((userId, order)).as(id)
           }
+        }
     }
 
 }
@@ -71,7 +70,7 @@ private object OrderSQL {
 
   val decoder: Decoder[Order] =
     (orderId *: userId *: paymentId *: jsonb[Map[ItemId, Quantity]] *: money).map {
-      case o *: _ *: p *: i *: t  *: EmptyTuple =>
+      case o *: _ *: p *: i *: t *: EmptyTuple =>
         Order(o, p, i, t)
       case _ => null
     }
@@ -89,7 +88,7 @@ private object OrderSQL {
         WHERE user_id = $userId
        """.query(decoder)
 
-  val selectByUserIdAndOrderId: Query[UserId *: OrderId  *: EmptyTuple, Order] =
+  val selectByUserIdAndOrderId: Query[UserId *: OrderId *: EmptyTuple, Order] =
     sql"""
         SELECT * FROM orders
         WHERE user_id = $userId

@@ -48,7 +48,7 @@ private object BrandSQL {
   val codec: Codec[Brand] =
     (brandId *: brandName).imap {
       case i *: n *: EmptyTuple => Brand(i, n)
-      case _  => Brand( BrandId(new UUID(99999, 12345678)) , BrandName("unbekannt"))
+      case _                    => Brand(BrandId(new UUID(99999, 12345678)), BrandName("unbekannt"))
     }(b => b.uuid *: b.name *: EmptyTuple)
 
   val selectAll: Query[Void, Brand] =
