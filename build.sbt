@@ -12,14 +12,14 @@ ThisBuild / scalafixDependencies += Libraries.organizeImports
 resolvers += Resolver.sonatypeRepo("snapshots")
 resolvers += Resolver.mavenCentral
 resolvers += "mvnrepository" at "https://mvnrepository.com/artifact"
-resolvers += "Local Maven Repository" at "file://C:/se/m2/repository"
-//resolvers += "Local Maven Repository" at "file://" + Path.userHome.absolutePath + "/.m2/repository"
+//resolvers += "Local Maven Repository" at "file://C:/se/m2/repository"
+resolvers += "Local Maven Repository" at "file://" + Path.userHome.absolutePath + "/.m2/repository"
 
 def dep(org: String, prefix: String, version: String)(modules: String*)(testModules: String*) =
   modules.map(m => org       %% (prefix ++ m) % version) ++
     testModules.map(m => org %% (prefix ++ m) % version) //% Test
 
-addCompilerPlugin("org.typelevel" %% "kind-projector"     % "0.13.2" cross CrossVersion.full)
+addCompilerPlugin("org.typelevel" %% "kind-projector"     % "0.13.3" cross CrossVersion.full)
 addCompilerPlugin("com.olegpy"    %% "better-monadic-for" % "0.3.1")
 
 val scalafixCommonSettings = inConfig(IntegrationTest)(scalafixConfigSettings(IntegrationTest))
@@ -51,8 +51,8 @@ lazy val tests = (project in file("modules/tests"))
       Libraries.logback % Runtime,
       Libraries.weaverScalaCheck,
      // "io.github.quafadas" %% "scautable" % "0.0.5",
-      "org.scalameta" %% "munit" % "0.7.29",
-      "org.scalatest" %% "scalatest" % "3.2.15"
+      "org.scalameta" %% "munit" % "1.0.0",
+      "org.scalatest" %% "scalatest" % "3.2.19"
     ) ++
       dep("org.typelevel", "cats-effect", "3.3.12")("")("-laws", "-testkit") ++
       dep("org.scalameta", "munit", "0.7.29")()("", "-scalacheck") ++
@@ -63,7 +63,7 @@ lazy val tests = (project in file("modules/tests"))
 
 lazy val javaFXModules = Seq("base", "controls", "fxml", "graphics", "media", "swing", "web")
 
-val natchezVersion = "0.1.6"
+val natchezVersion = "0.3.5"
 lazy val core = (project in file("modules/core"))
   .enablePlugins(DockerPlugin)
   .enablePlugins(AshScriptPlugin)
@@ -89,7 +89,7 @@ lazy val core = (project in file("modules/core"))
       CompilerPlugin.kindProjector,
       CompilerPlugin.betterMonadicFor,
       CompilerPlugin.semanticDB,
-      Libraries.cats,
+      "org.typelevel"    %% "cats-core"   %  "2.12.0", //Libraries.cats,
       Libraries.catsEffect,
       Libraries.catsRetry,
       Libraries.circeCore,
@@ -124,12 +124,12 @@ lazy val core = (project in file("modules/core"))
       // "com.lihaoyi" %% "ammonite" % "2.5.3" cross CrossVersion.full
       "com.lihaoyi"        %% "ammonite"            % "2.5.11" cross CrossVersion.full,
       "com.github.scopt"   %% "scopt"               % "4.1.0",
-      "org.tpolecat"       %% "natchez-core"        % natchezVersion,
+      "org.tpolecat"       %% "natchez-core"        %  natchezVersion,
       "org.tpolecat"       %% "natchez-jaeger"      % natchezVersion,
       "org.tpolecat"       %% "natchez-honeycomb"   % natchezVersion,
-      "io.github.kirill5k" %% "mongo4cats-core"     % "0.6.16",
-      "io.github.kirill5k" %% "mongo4cats-circe" % "0.6.16",
-      "io.github.kirill5k" %% "mongo4cats-embedded" % "0.6.16",
+      "io.github.kirill5k" %% "mongo4cats-core"     % "0.7.8",
+      "io.github.kirill5k" %% "mongo4cats-circe" % "0.7.6",
+      "io.github.kirill5k" %% "mongo4cats-embedded" % "0.7.8",
       Libraries.catsLaws,
       Libraries.log4catsNoOp,
       Libraries.monocleLaw,
